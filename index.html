@@ -151,6 +151,17 @@
     border: 1px dashed rgba(255,255,255,.3); border-radius: 8px; font-size: 13px; }
   #editor .filepick:hover { border-color: var(--accent); }
   #editor .filepick input { display: none; }
+  #editor .status { margin: 6px 0; font-size: 12px; color: var(--muted); }
+  #editor .status.dirty { color: var(--accent); }
+  #editor .filepick.busy { opacity: .6; pointer-events: none; }
+  #login { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(5,6,8,.7); }
+  #login form { width: min(320px, calc(100vw - 32px)); padding: 20px; background: var(--panel-solid); }
+  #login h3 { margin: 0 0 12px; font-size: 16px; }
+  #login input { width: 100%; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border); background: rgba(0,0,0,.35);
+    color: var(--text); font: inherit; }
+  #login button { width: 100%; margin-top: 10px; padding: 9px; border-radius: 8px; border: 0; background: var(--accent);
+    color: #1a1406; font: inherit; font-weight: 600; cursor: pointer; }
+  #login p { min-height: 18px; margin: 8px 0 0; color: var(--danger); font-size: 13px; }
   #toast { position: fixed; left: 50%; top: 20px; transform: translateX(-50%); padding: 8px 14px; font-size: 13px;
     background: var(--panel-solid); transition: opacity .3s; }
   #toast.faded { opacity: 0; pointer-events: none; }
@@ -198,11 +209,17 @@
 </div>
 <div id="editor" class="glass hidden"></div>
 <div id="toast" class="glass faded"></div>
+<div id="login" class="hidden"><form class="glass">
+  <h3>Đăng nhập quản trị</h3>
+  <input type="password" placeholder="Mật khẩu" autocomplete="current-password" required>
+  <button>Đăng nhập</button>
+  <p></p>
+</form></div>
 
 <div id="loader" class="glass faded"><span id="loaderText">Đang tải…</span><div id="bar"><i></i></div></div>
 <div id="hint" class="glass">Kéo để xoay · Cuộn / chụm để phóng to</div>
 
-<!-- Dữ liệu cảnh: khung hình mặc định (view) và điểm bấm (hotspots) của từng ảnh -->
+<!-- Dữ liệu cảnh mặc định: chỉ dùng khi server chưa có dữ liệu (/api/scenes) -->
 <script type="application/json" id="scenes-data">
 {
   "scenes": [
@@ -257,14 +274,15 @@ import * as THREE from 'three';
 const FOV_MIN = 30, FOV_MAX = 100, FOV_DEFAULT = 75;
 const AUTO_SPEED = 0.03;          // độ / frame
 const IDLE_BEFORE_AUTO = 4000;    // ms
-const DRAFT_KEY = 'vr360-draft';
+const PW_KEY = 'vr360-admin';
 
-// ---- Dữ liệu cảnh: khối #scenes-data ở trên (chế độ ?edit dùng bản nháp nếu có) ----
+// ---- Dữ liệu cảnh: lấy từ server, nếu chưa có thì dùng khối #scenes-data ở trên ----
 const EDIT = new URLSearchParams(location.search).has('edit');
-let data, usingDraft = false;
-if (EDIT) {
-  try { const d = localStorage.getItem(DRAFT_KEY); if (d) { data = JSON.parse(d); usingDraft = true; } } catch {}
-}
+let data, fromServer = false;
+try {
+  const res = await fetch('/api/scenes', { cache: 'no-store', signal: AbortSignal.timeout(6000) });
+  if (res.ok) { const d = await res.json(); if (Array.isArray(d.scenes) && d.scenes.length) { data = d; fromServer = true; } }
+} catch {}
 if (!data) data = JSON.parse(document.getElementById('scenes-data').textContent);
 const SCENES = data.scenes;
 SCENES.forEach(s => { s.hotspots ??= []; s.view ??= { lon: 0, lat: 0, fov: FOV_DEFAULT }; });
@@ -641,11 +659,78 @@ function toast(msg) {
 const editor = document.getElementById('editor');
 let selected = null, placing = false, lastReadout = '', lastType = 'scene';
 
+let dirty = false, saving = false;
+let password = '';
+try { password = sessionStorage.getItem(PW_KEY) || ''; } catch {}
+
+// Đánh dấu có thay đổi chưa lưu lên server
 function saveDraft() {
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(data)); usingDraft = true; } catch {}
-  const d = editor.querySelector('.draft');
-  if (d) d.classList.remove('hidden');
+  dirty = true;
+  updateStatus();
 }
+function updateStatus() {
+  const el = editor.querySelector('.status');
+  if (!el) return;
+  el.classList.toggle('dirty', dirty);
+  el.textContent = saving ? 'Đang lưu…' : dirty ? '● Có thay đổi chưa lưu'
+    : fromServer ? '✓ Đã lưu trên server' : 'Server chưa có dữ liệu — bấm Lưu để lưu lần đầu';
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { ...opts.headers, 'x-admin-password': password } });
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 401) { showLogin('Phiên đăng nhập hết hạn, nhập lại mật khẩu'); }
+  if (!res.ok) throw new Error(body.error || `Lỗi ${res.status}`);
+  return body;
+}
+
+async function saveToServer() {
+  if (saving) return;
+  saving = true; updateStatus();
+  try {
+    await api('/api/scenes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
+    dirty = false; fromServer = true;
+    toast('Đã lưu lên server');
+  } catch (err) { toast('Không lưu được: ' + err.message); }
+  saving = false; updateStatus();
+}
+
+// Thu nhỏ ảnh về JPEG, cạnh dài tối đa `max` px
+async function resizeImage(file, max, quality) {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close();
+  return new Promise((ok, fail) => c.toBlob(b => b ? ok(b) : fail(new Error('Không đọc được ảnh')), 'image/jpeg', quality));
+}
+async function uploadImage(blob, name) {
+  return (await api('/api/upload?name=' + encodeURIComponent(name), { method: 'POST', headers: { 'content-type': blob.type }, body: blob })).url;
+}
+
+// ---- Đăng nhập ----
+const loginEl = document.getElementById('login');
+function showLogin(msg = '') {
+  loginEl.querySelector('p').textContent = msg;
+  loginEl.classList.remove('hidden');
+  loginEl.querySelector('input').focus();
+}
+loginEl.querySelector('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const input = loginEl.querySelector('input'), btn = loginEl.querySelector('button'), msg = loginEl.querySelector('p');
+  btn.disabled = true; msg.textContent = '';
+  try {
+    const res = await fetch('/api/scenes?check=1', { method: 'POST', headers: { 'x-admin-password': input.value } });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || (res.status === 404 ? 'Chưa có server (cần deploy qua GitHub)' : `Lỗi ${res.status}`));
+    password = input.value;
+    try { sessionStorage.setItem(PW_KEY, password); } catch {}
+    loginEl.classList.add('hidden');
+    input.value = '';
+  } catch (err) { msg.textContent = err.message; }
+  btn.disabled = false;
+});
 
 function onPanoClick(x, y) {
   if (!EDIT) return;
@@ -700,7 +785,6 @@ function renderEditor() {
   lastReadout = '';
   editor.innerHTML = `
     <h4>Chế độ chỉnh sửa · ${esc(s.name)}</h4>
-    <p class="draft muted ${usingDraft ? '' : 'hidden'}">Đang dùng bản nháp (lưu trong trình duyệt này). Nhớ sao chép JSON khi xong.</p>
     <div class="readout" id="readout"></div>
 
     <h4>Khung hình mặc định</h4>
@@ -727,8 +811,8 @@ function renderEditor() {
           <label>Mô tả ngắn (tuỳ chọn)</label><textarea data-f="text">${esc(h.text)}</textarea>
           <label>Ảnh lớn</label><input data-f="image" value="${esc(h.image)}" placeholder="images/points/ten-anh.jpg">
           <label>Ảnh xem trước (tuỳ chọn, để trống = dùng ảnh lớn)</label><input data-f="thumb" value="${esc(h.thumb)}" placeholder="images/points/thumbs/ten-anh.jpg">
-          <label class="filepick">Chọn ảnh từ máy để xem thử…<input type="file" accept="image/*" data-file></label>
-          <p class="muted">Ảnh chọn từ máy chỉ xem được trong phiên này. Nhớ chép file vào thư mục <b>images/points/</b> của website.</p>
+          <label class="filepick">Tải ảnh từ máy lên…<input type="file" accept="image/*" data-file></label>
+          <p class="muted">Ảnh được thu nhỏ rồi tải lên server. Nhớ bấm <b>Lưu lên server</b> sau đó.</p>
         ` : `
           <label>Tiêu đề</label><input data-f="title" value="${esc(h.title)}">
           <label>Nội dung</label><textarea data-f="text">${esc(h.text)}</textarea>
@@ -743,13 +827,15 @@ function renderEditor() {
     <button data-act="place" class="${placing ? 'on' : ''}" style="width:100%">${placing ? 'Bấm lên ảnh để đặt… (Esc huỷ)' : '+ Thêm điểm bấm'}</button>
 
     <h4>Lưu</h4>
+    <p class="status"></p>
+    <button class="primary" data-act="save" style="width:100%;margin-bottom:6px">Lưu lên server (Ctrl+S)</button>
     <div class="row">
-      <button data-act="download">Tải file JSON</button>
-      <button class="primary" data-act="copy">Sao chép JSON</button>
+      <button data-act="discard">Bỏ thay đổi</button>
+      <button data-act="download">Tải bản sao JSON</button>
     </div>
-    <button data-act="discard" style="width:100%">Bỏ bản nháp, dùng lại file</button>
-    <p class="muted">Dán JSON đã sao chép vào khối &lt;script id="scenes-data"&gt; trong index.html, rồi bỏ “?edit” khỏi địa chỉ để xem như người dùng.</p>
+    <p class="muted">Bỏ “?edit” khỏi địa chỉ để xem như khách.</p>
   `;
+  updateStatus();
 }
 
 if (EDIT) {
@@ -780,11 +866,10 @@ if (EDIT) {
       a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
       a.download = 'scenes.json'; a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    } else if (act === 'copy') {
-      navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => toast('Đã sao chép JSON'), () => toast('Không sao chép được'));
-    } else if (act === 'discard') {
-      if (!confirm('Bỏ mọi thay đổi chưa dán vào index.html?')) return;
-      try { localStorage.removeItem(DRAFT_KEY); } catch {}
+    } else if (act === 'save') saveToServer();
+    else if (act === 'discard') {
+      if (dirty && !confirm('Bỏ mọi thay đổi chưa lưu?')) return;
+      dirty = false;
       location.reload();
     }
   });
@@ -809,18 +894,32 @@ if (EDIT) {
     }
   });
 
-  editor.addEventListener('change', e => {
+  editor.addEventListener('change', async e => {
     if (!e.target.matches('[data-file]') || !selected) return;
-    const file = e.target.files[0];
+    const file = e.target.files[0], h = selected;
     if (!file) return;
-    const path = 'images/points/' + file.name;
-    localFiles.set(path, URL.createObjectURL(file));
-    selected.image = path;
-    selected.title = fileTitle(file.name);
-    delete selected.thumb;
-    saveDraft(); buildHotspots(); renderEditor();
-    toast(`Nhớ chép ${file.name} vào images/points/`);
+    const pick = e.target.closest('.filepick');
+    pick.classList.add('busy'); pick.firstChild.textContent = 'Đang tải ảnh lên…';
+    try {
+      const name = fileTitle(file.name);
+      // 2 bản như ảnh có sẵn: 2880px cho lightbox, 560px cho popup xem trước
+      const [full, thumb] = await Promise.all([resizeImage(file, 2880, 0.85), resizeImage(file, 560, 0.8)]);
+      const [image, thumbUrl] = await Promise.all([uploadImage(full, name), uploadImage(thumb, name + '-thumb')]);
+      localFiles.set(image, URL.createObjectURL(full));
+      Object.assign(h, { image, thumb: thumbUrl, title: h.title || name });
+      saveDraft(); buildHotspots(); if (selected === h) renderEditor();
+      toast('Đã tải ảnh lên. Nhớ bấm Lưu lên server');
+    } catch (err) {
+      toast('Không tải được ảnh: ' + err.message);
+      if (pick.isConnected) { pick.classList.remove('busy'); pick.firstChild.textContent = 'Tải ảnh từ máy lên…'; }
+    }
   });
+
+  addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveToServer(); }
+  });
+  addEventListener('beforeunload', e => { if (dirty) e.preventDefault(); });
+  if (!password) showLogin();
 }
 
 // placing được đặt lại khi đặt xong / Esc
