@@ -28,7 +28,7 @@
   .hidden { display: none !important; }
 
   #logo { position: fixed; top: 16px; left: 16px; display: block; width: auto; height: auto; max-height: 56px;
-    max-width: min(40vw, 320px); pointer-events: none; filter: drop-shadow(0 1px 6px rgba(0,0,0,.35)); }
+    max-width: min(40vw, 320px); pointer-events: none; }
 
   #tools { position: fixed; top: 16px; right: 16px; display: flex; gap: 8px; }
   #tools button { width: 42px; height: 42px; display: grid; place-items: center; color: var(--text); cursor: pointer; }
@@ -161,6 +161,11 @@
   #editor .status { margin: 6px 0; font-size: 12px; color: var(--muted); }
   #editor .status.dirty { color: var(--accent); }
   #editor .filepick.busy { opacity: .6; pointer-events: none; }
+  #editor .hslist li { display: flex; align-items: center; gap: 6px; }
+  #editor .hslist li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #editor .hslist li button { flex: 0 0 auto; padding: 3px 5px; display: grid; place-items: center; color: var(--muted); }
+  #editor .hslist li button:hover { color: var(--danger); border-color: var(--danger); }
+  #editor .hslist li button svg { width: 14px; height: 14px; }
   #editor .scenes li { display: flex; align-items: center; gap: 6px; }
   #editor .scenes li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #editor .scenes li button { flex: 0 0 auto; padding: 2px 7px; }
@@ -802,6 +807,29 @@ function onPanoClick(x, y) {
   } else if (selected) select(null);
 }
 
+const TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
+const undoStack = []; // các điểm đã xoá: { scene, h, index }
+
+function deleteHotspot(h) {
+  const s = displayed, index = s?.hotspots.indexOf(h) ?? -1;
+  if (index < 0) return;
+  s.hotspots.splice(index, 1);
+  undoStack.push({ scene: s, h, index });
+  saveDraft();
+  select(selected === h ? null : selected);
+  toast('Đã xoá điểm · Ctrl+Z để hoàn tác');
+}
+function undoDelete() {
+  let u;
+  do u = undoStack.pop(); while (u && !SCENES.includes(u.scene)); // bỏ qua điểm thuộc cảnh đã xoá
+  if (!u) return toast('Không còn gì để hoàn tác');
+  u.scene.hotspots.splice(Math.min(u.index, u.scene.hotspots.length), 0, u.h);
+  saveDraft();
+  if (displayed !== u.scene) show(u.scene).then(() => select(u.h));
+  else select(u.h);
+  toast('Đã khôi phục điểm');
+}
+
 function select(h) {
   selected = h;
   buildHotspots();
@@ -873,7 +901,11 @@ function renderEditor() {
     </div>
 
     <h4>Điểm bấm (${s.hotspots.length})</h4>
-    <ul>${s.hotspots.map((x, i) => `<li data-i="${i}" class="${x === h ? 'selected' : ''}">${TYPE_MARK[x.type] ?? 'ⓘ'} ${esc(hotspotLabel(x))}</li>`).join('')}</ul>
+    <ul class="hslist">${s.hotspots.map((x, i) => `<li data-i="${i}" class="${x === h ? 'selected' : ''}">
+      <span>${TYPE_MARK[x.type] ?? 'ⓘ'} ${esc(hotspotLabel(x))}</span>
+      <button data-act="delHs" data-i="${i}" title="Xoá điểm (Delete)">${TRASH}</button>
+    </li>`).join('')}</ul>
+    ${s.hotspots.length ? '<p class="muted">Chọn điểm rồi bấm Delete để xoá · Ctrl+Z để hoàn tác.</p>' : ''}
     ${h ? `
       <div class="form">
         <label>Loại</label>
@@ -955,9 +987,9 @@ if (EDIT) {
       // chọn hướng gần nhất với góc hiện tại để không quay vòng
       targetLon = lon + (((selected.lon - lon) % 360) + 540) % 360 - 180;
       targetLat = selected.lat; interact();
-    } else if (act === 'delete' && selected) {
-      s.hotspots.splice(s.hotspots.indexOf(selected), 1);
-      saveDraft(); select(null);
+    } else if (act === 'delHs') deleteHotspot(s.hotspots[+actEl.dataset.i]);
+    else if (act === 'delete' && selected) {
+      deleteHotspot(selected);
     } else if (act === 'place') {
       placing = !placing; document.body.classList.toggle('placing', placing); renderEditor();
     } else if (act === 'download') {
@@ -995,8 +1027,8 @@ if (EDIT) {
       saveDraft(); buildHotspots();
       renderEditor();
     } else {
-      const li = editor.querySelector('li.selected');
-      if (li) li.textContent = (TYPE_MARK[selected.type] ?? 'ⓘ') + ' ' + hotspotLabel(selected);
+      const span = editor.querySelector('.hslist li.selected span');
+      if (span) span.textContent = (TYPE_MARK[selected.type] ?? 'ⓘ') + ' ' + hotspotLabel(selected);
     }
   });
 
@@ -1071,7 +1103,10 @@ if (EDIT) {
   });
 
   addEventListener('keydown', e => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveToServer(); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveToServer(); return; }
+    if (e.target.closest('input, textarea, select') || !loginEl.classList.contains('hidden')) return;
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selected) { e.preventDefault(); deleteHotspot(selected); }
+    else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undoDelete(); }
   });
   addEventListener('beforeunload', e => { if (dirty) e.preventDefault(); });
   if (!password) showLogin();
