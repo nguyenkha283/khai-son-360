@@ -27,9 +27,8 @@
     backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 12px; }
   .hidden { display: none !important; }
 
-  #title { position: fixed; top: 16px; left: 16px; padding: 10px 16px; pointer-events: none; }
-  #title small { display: block; color: var(--muted); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
-  #title strong { font-size: 18px; font-weight: 600; }
+  #logo { position: fixed; top: 16px; left: 16px; display: block; width: auto; height: auto; max-height: 56px;
+    max-width: min(40vw, 320px); pointer-events: none; filter: drop-shadow(0 1px 6px rgba(0,0,0,.35)); }
 
   #tools { position: fixed; top: 16px; right: 16px; display: flex; gap: 8px; }
   #tools button { width: 42px; height: 42px; display: grid; place-items: center; color: var(--text); cursor: pointer; }
@@ -42,7 +41,6 @@
   #scenes button { flex: 0 0 auto; width: 150px; padding: 0; border: 2px solid transparent; border-radius: 9px;
     background: none; color: var(--text); cursor: pointer; overflow: hidden; text-align: left; }
   #scenes button img { display: block; width: 100%; aspect-ratio: 2 / 1; object-fit: cover; }
-  #scenes button span { display: block; padding: 6px 8px; font-size: 13px; background: rgba(0,0,0,.45); }
   #scenes button.active { border-color: var(--accent); }
   #scenes button:hover:not(.active) { border-color: rgba(255,255,255,.4); }
 
@@ -97,7 +95,16 @@
   .hs .preview small { display: block; padding: 2px 4px 2px; color: var(--muted); font-size: 12px; }
   .hs .preview small:empty { display: none; }
   .hs.image:hover .preview { opacity: 1; transform: translateX(calc(-50% + var(--shift, 0px))); }
-  .hs.image:hover .label { opacity: 0; }
+
+  /* Điểm ảnh / thông tin: ô nhãn có mũi tên nhỏ chỉ xuống đúng vị trí điểm */
+  .hs.pin .label { position: relative; opacity: 1; max-width: 240px; overflow: hidden; text-overflow: ellipsis;
+    padding: 6px 12px; font-weight: 500; background: var(--panel-solid); border-color: rgba(255,255,255,.3);
+    box-shadow: 0 2px 10px rgba(0,0,0,.35); transition: background .15s, color .15s; }
+  .hs.pin .tip { width: 0; height: 0; margin-top: -7px; border: 7px solid transparent; border-bottom-width: 0;
+    border-top-color: var(--panel-solid); transition: border-color .15s; }
+  .hs.pin:hover .label, .hs.pin.selected .label { background: var(--accent); color: #1a1406; border-color: var(--accent); }
+  .hs.pin:hover .tip, .hs.pin.selected .tip { border-top-color: var(--accent); }
+  .hs.pin.below .preview { top: calc(100% + 8px); }
 
   #lightbox { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; gap: 14px;
     padding: 60px 72px 20px; background: rgba(5, 6, 8, .93); opacity: 0; pointer-events: none; transition: opacity .2s; }
@@ -158,6 +165,8 @@
   #editor .scenes li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #editor .scenes li button { flex: 0 0 auto; padding: 2px 7px; }
   #editor .scenes li.current { border-color: var(--accent); }
+  #editor .logo-preview { display: block; max-width: 100%; max-height: 60px; margin: 4px 0;
+    background: repeating-conic-gradient(#333 0 25%, #222 0 50%) 0 0 / 14px 14px; border-radius: 6px; }
   #login { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(5,6,8,.7); }
   #login form { width: min(320px, calc(100vw - 32px)); padding: 20px; background: var(--panel-solid); }
   #login h3 { margin: 0 0 12px; font-size: 16px; }
@@ -171,8 +180,7 @@
   #toast.faded { opacity: 0; pointer-events: none; }
 
   @media (max-width: 600px) {
-    #title { top: 12px; left: 12px; padding: 8px 12px; }
-    #title strong { font-size: 15px; }
+    #logo { top: 12px; left: 12px; max-height: 40px; }
     #tools { top: 12px; right: 12px; }
     #scenes { bottom: 12px; gap: 8px; padding: 8px; }
     #scenes button { width: 110px; }
@@ -190,7 +198,7 @@
 <div id="view"></div>
 <div id="hotspots"></div>
 
-<div id="title" class="glass"><small>VR360</small><strong id="sceneName"></strong></div>
+<img id="logo" class="hidden" alt="Logo dự án">
 
 <div id="tools">
   <button id="btnRotate" class="glass" title="Tự động xoay (R)">
@@ -455,7 +463,6 @@ async function show(s) {
   if (current === s) return;
   current = s;
   history.replaceState(null, '', location.search + '#' + s.id);
-  document.getElementById('sceneName').textContent = s.name;
   document.querySelectorAll('#scenes button').forEach(b => b.classList.toggle('active', b.dataset.id === s.id));
   closeInfo();
   try {
@@ -505,8 +512,9 @@ function buildHotspots() {
   hsLayer.replaceChildren();
   hsEls = (displayed?.hotspots ?? []).map(h => {
     const el = document.createElement('div');
-    el.className = 'hs ' + (ICONS[h.type] ? h.type : 'info');
-    el.innerHTML = `<div class="dot">${ICONS[h.type] ?? ICONS.info}</div><div class="label"></div>`;
+    const type = ICONS[h.type] ? h.type : 'info', pin = type !== 'scene';
+    el.className = 'hs ' + type + (pin ? ' pin' : '');
+    el.innerHTML = pin ? '<div class="label"></div><div class="tip"></div>' : `<div class="dot">${ICONS[type]}</div><div class="label"></div>`;
     el.querySelector('.label').textContent = hotspotLabel(h);
     if (h.type === 'image') {
       const pv = document.createElement('div');
@@ -528,7 +536,7 @@ function buildHotspots() {
     hsLayer.appendChild(el);
     if (EDIT) attachHotspotDrag(el, h);
     else el.addEventListener('click', () => activateHotspot(h));
-    return { el, h };
+    return { el, h, pin };
   });
 }
 
@@ -599,14 +607,15 @@ info.querySelector('button').onclick = closeInfo;
 const tmpV = new THREE.Vector3(), camDir = new THREE.Vector3();
 function updateHotspots() {
   camera.getWorldDirection(camDir);
-  for (const { el, h } of hsEls) {
+  for (const { el, h, pin } of hsEls) {
     dirFrom(h.lon, h.lat, tmpV);
     const facing = tmpV.dot(camDir) > 0.05;
     tmpV.project(camera);
     if (!facing || Math.abs(tmpV.x) > 1.3 || Math.abs(tmpV.y) > 1.3) { el.style.display = 'none'; continue; }
     el.style.display = '';
     const x = (tmpV.x + 1) / 2 * innerWidth, y = (1 - tmpV.y) / 2 * innerHeight;
-    el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -20px)`;
+    // mũi tên chuyển cảnh: neo ở tâm vòng tròn; ô nhãn: neo ở đầu mũi tên nhỏ bên dưới
+    el.style.transform = `translate(${x}px, ${y}px) ` + (pin ? 'translate(-50%, -100%)' : 'translate(-50%, -20px)');
     if (h.type === 'image') {
       // popup lật xuống dưới khi gần mép trên, và dịch ngang để không tràn màn hình
       el.classList.toggle('below', y < 240);
@@ -625,15 +634,21 @@ function buildSceneBar() {
     const b = document.createElement('button');
     b.dataset.id = s.id;
     b.title = `${s.name} (${i + 1})`;
-    b.innerHTML = `<img alt=""><span></span>`;
+    b.innerHTML = `<img alt="">`;
     b.querySelector('img').src = imgSrc(s.thumb || s.src);
-    b.querySelector('span').textContent = s.name;
     b.classList.toggle('active', s === current);
     b.onclick = () => show(s);
     bar.appendChild(b);
   });
 }
 buildSceneBar();
+
+const logoEl = document.getElementById('logo');
+function applyLogo() {
+  logoEl.classList.toggle('hidden', !data.logo);
+  if (data.logo) logoEl.src = imgSrc(data.logo); else logoEl.removeAttribute('src');
+}
+applyLogo();
 
 const btnRotate = document.getElementById('btnRotate');
 function toggleRotate() { autoRotate = !autoRotate; btnRotate.classList.toggle('on', autoRotate); }
@@ -706,14 +721,14 @@ async function saveToServer() {
 }
 
 // Thu nhỏ ảnh về JPEG, cạnh dài tối đa `max` px
-async function resizeImage(file, max, quality) {
+async function resizeImage(file, max, quality, type = 'image/jpeg') {
   const bmp = await createImageBitmap(file);
   const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas');
   c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
   c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
   bmp.close();
-  return new Promise((ok, fail) => c.toBlob(b => b ? ok(b) : fail(new Error('Không đọc được ảnh')), 'image/jpeg', quality));
+  return new Promise((ok, fail) => c.toBlob(b => b ? ok(b) : fail(new Error('Không đọc được ảnh')), type, quality));
 }
 // Netlify Functions chỉ nhận ~6MB mỗi lần gửi -> ảnh lớn được cắt thành nhiều phần 4MB
 const CHUNK = 4 * 1024 * 1024;
@@ -798,14 +813,16 @@ function attachHotspotDrag(el, h) {
   el.addEventListener('pointerdown', e => {
     e.stopPropagation();
     el.setPointerCapture(e.pointerId);
-    start = { x: e.clientX, y: e.clientY, moved: false };
+    dirFrom(h.lon, h.lat, tmpV).project(camera);
+    const ax = (tmpV.x + 1) / 2 * innerWidth, ay = (1 - tmpV.y) / 2 * innerHeight;
+    start = { x: e.clientX, y: e.clientY, dx: ax - e.clientX, dy: ay - e.clientY, moved: false };
   });
   el.addEventListener('pointermove', e => {
     if (!start) return;
     if (!start.moved && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 4) return;
     start.moved = true;
-    // điểm neo của biểu tượng nằm ở tâm vòng tròn (cách đỉnh 20px)
-    Object.assign(h, lonLatAt(e.clientX, e.clientY));
+    // giữ nguyên khoảng cách giữa con trỏ và điểm neo
+    Object.assign(h, lonLatAt(e.clientX + start.dx, e.clientY + start.dy));
   });
   el.addEventListener('pointerup', () => {
     if (!start) return;
@@ -827,6 +844,14 @@ function renderEditor() {
   editor.innerHTML = `
     <h4>Chế độ chỉnh sửa · ${esc(s.name)}</h4>
     <div class="readout" id="readout"></div>
+
+    <h4>Logo dự án</h4>
+    ${data.logo ? `<img class="logo-preview" src="${esc(imgSrc(data.logo))}" alt="">` : '<p class="muted">Chưa có logo.</p>'}
+    <div class="row">
+      <label class="filepick" style="margin-top:0">${data.logo ? 'Đổi logo…' : 'Tải logo lên…'}<input type="file" accept="image/png,image/jpeg" data-logo></label>
+      ${data.logo ? '<button class="danger" data-act="removeLogo" style="flex:0 0 auto">Xoá</button>' : ''}
+    </div>
+    <p class="muted">PNG nền trong suốt hoặc JPEG.</p>
 
     <h4>Cảnh 360° (${SCENES.length})</h4>
     <ul class="scenes">${SCENES.map((o, i) => `<li data-scene="${i}" class="${o === s ? 'current' : ''}">
@@ -904,7 +929,10 @@ if (EDIT) {
     if (sli && !act) return show(SCENES[+sli.dataset.scene]);
     const s = displayed;
     if (!act || !s) return;
-    if (act === 'sceneUp' || act === 'sceneDown') {
+    if (act === 'removeLogo') {
+      delete data.logo;
+      applyLogo(); saveDraft(); renderEditor();
+    } else if (act === 'sceneUp' || act === 'sceneDown') {
       const i = +actEl.dataset.i, j = i + (act === 'sceneUp' ? -1 : 1);
       if (!SCENES[j]) return;
       [SCENES[i], SCENES[j]] = [SCENES[j], SCENES[i]];
@@ -948,7 +976,6 @@ if (EDIT) {
   editor.addEventListener('input', e => {
     if (e.target.dataset.sceneF === 'name' && displayed) {
       displayed.name = e.target.value;
-      document.getElementById('sceneName').textContent = displayed.name;
       saveDraft(); buildSceneBar(); buildHotspots();
       const span = editor.querySelector('li.current span');
       if (span) span.textContent = `${SCENES.indexOf(displayed) + 1}. ${displayed.name}`;
@@ -974,6 +1001,24 @@ if (EDIT) {
   });
 
   editor.addEventListener('change', async e => {
+    if (e.target.matches('[data-logo]')) {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (!/^image\/(png|jpeg)$/.test(file.type)) return toast('Logo cần là file PNG hoặc JPEG');
+      const pick = e.target.closest('.filepick');
+      pick.classList.add('busy'); pick.firstChild.textContent = 'Đang tải lên…';
+      try {
+        const png = file.type === 'image/png'; // giữ nền trong suốt
+        const blob = await resizeImage(file, 800, 0.9, png ? 'image/png' : 'image/jpeg');
+        const url = await uploadImage(blob, 'logo');
+        localFiles.set(url, URL.createObjectURL(blob));
+        data.logo = url;
+        applyLogo(); saveDraft();
+        toast('Đã tải logo lên. Nhớ bấm Lưu lên server');
+      } catch (err) { toast('Không tải được logo: ' + err.message); }
+      renderEditor();
+      return;
+    }
     const mode = e.target.dataset.pano;
     if (mode) {
       const file = e.target.files[0], s = displayed;
