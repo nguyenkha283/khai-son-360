@@ -129,8 +129,13 @@
   #lightbox .next { right: 14px; top: 50%; transform: translateY(-50%); }
 
   /* ---- Trình chỉnh sửa ---- */
-  #editor { position: fixed; top: 70px; right: 16px; width: 300px; max-height: calc(100vh - 230px); overflow-y: auto;
-    padding: 14px; background: var(--panel-solid); font-size: 13px; }
+  #editor { position: fixed; top: 70px; right: 16px; width: 300px; max-height: calc(100vh - 230px);
+    display: flex; flex-direction: column; overflow: hidden; background: var(--panel-solid); font-size: 13px; }
+  #editor .body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; }
+  #editor .foot { flex: 0 0 auto; padding: 10px 14px 12px; border-top: 1px solid var(--border); }
+  #editor .foot .status { margin: 0 0 8px; }
+  #editor .foot .row { margin-bottom: 0; }
+  #editor .back { margin-bottom: 10px; padding: 5px 10px; }
   #editor h4 { margin: 14px 0 8px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
   #editor h4:first-child { margin-top: 0; }
   #editor .row { display: flex; gap: 6px; margin-bottom: 6px; }
@@ -166,12 +171,27 @@
   #editor .hslist li button { flex: 0 0 auto; padding: 3px 5px; display: grid; place-items: center; color: var(--muted); }
   #editor .hslist li button:hover { color: var(--danger); border-color: var(--danger); }
   #editor .hslist li button svg { width: 14px; height: 14px; }
-  #editor .scenes li { display: flex; align-items: center; gap: 6px; }
-  #editor .scenes li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #editor .scenes li button { flex: 0 0 auto; padding: 2px 7px; }
-  #editor .scenes li.current { border-color: var(--accent); }
-  #editor .logo-preview { display: block; max-width: 100%; max-height: 60px; margin: 4px 0;
-    background: repeating-conic-gradient(#333 0 25%, #222 0 50%) 0 0 / 14px 14px; border-radius: 6px; }
+  #editor .iconbtn { flex: 0 0 auto; width: 28px; height: 28px; padding: 0; display: grid; place-items: center;
+    border-radius: 7px; border: 1px solid var(--border); background: rgba(255,255,255,.06); color: var(--muted); cursor: pointer; }
+  #editor .iconbtn:hover { color: var(--text); border-color: rgba(255,255,255,.35); }
+  #editor .iconbtn.danger:hover { color: var(--danger); border-color: var(--danger); }
+  #editor .iconbtn svg { width: 14px; height: 14px; }
+  #editor .iconbtn input { display: none; }
+  #editor .scenes li { display: flex; align-items: center; gap: 6px; padding: 5px 6px; }
+  #editor .scenes li span:not(.grip) { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #editor .scenes li.current { border-color: rgba(232,176,74,.5); }
+  #editor .scenes li.dragging { background: rgba(255,255,255,.1); border-color: var(--accent); }
+  #editor .grip { flex: 0 0 auto; display: grid; place-items: center; width: 18px; height: 28px; color: var(--muted);
+    cursor: grab; touch-action: none; }
+  #editor .grip:active { cursor: grabbing; }
+  #editor .grip svg { width: 14px; height: 14px; }
+  #editor .logo-box { position: relative; display: grid; place-items: center; min-height: 80px; padding: 12px; border-radius: 8px;
+    background: repeating-conic-gradient(#2c2f35 0 25%, #1f2227 0 50%) 0 0 / 16px 16px; }
+  #editor .logo-box img { display: block; max-width: 100%; max-height: 120px; }
+  #editor .logo-box .actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; }
+  #editor .logo-box .iconbtn { background: rgba(14,17,22,.85); }
+  #editor .busy { opacity: .6; pointer-events: none; }
+  #editor .filepick.big { margin-top: 0; padding: 28px 7px; }
   #login { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(5,6,8,.7); }
   #login form { width: min(320px, calc(100vw - 32px)); padding: 20px; background: var(--panel-solid); }
   #login h3 { margin: 0 0 12px; font-size: 16px; }
@@ -642,7 +662,7 @@ function buildSceneBar() {
     b.innerHTML = `<img alt="">`;
     b.querySelector('img').src = imgSrc(s.thumb || s.src);
     b.classList.toggle('active', s === current);
-    b.onclick = () => show(s);
+    b.onclick = () => EDIT ? openScenePanel(s) : show(s);
     bar.appendChild(b);
   });
 }
@@ -687,7 +707,7 @@ function toast(msg) {
 
 // ---- Chế độ chỉnh sửa (?edit) ----
 const editor = document.getElementById('editor');
-let selected = null, placing = false, lastReadout = '', lastType = 'scene';
+let selected = null, placing = false, lastType = 'scene';
 
 let dirty = false, saving = false;
 let password = '';
@@ -808,6 +828,9 @@ function onPanoClick(x, y) {
 }
 
 const TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
+const PENCIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg>';
+const GRIP = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+let panel = 'overview'; // 'overview': logo + danh sách cảnh · 'scene': cài đặt riêng của cảnh đang xem
 const undoStack = []; // các điểm đã xoá: { scene, h, index }
 
 function deleteHotspot(h) {
@@ -862,36 +885,63 @@ function attachHotspotDrag(el, h) {
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-function renderEditor() {
-  if (!EDIT || !displayed) return;
-  const s = displayed;
-  const sceneOpts = (val) => SCENES.filter(o => o !== s)
-    .map(o => `<option value="${esc(o.id)}"${o.id === val ? ' selected' : ''}>${esc(o.name)}</option>`).join('');
-  const h = selected;
-  lastReadout = '';
-  editor.innerHTML = `
-    <h4>Chế độ chỉnh sửa · ${esc(s.name)}</h4>
-    <div class="readout" id="readout"></div>
+function openScenePanel(o) {
+  panel = 'scene';
+  if (current === o) renderEditor(); else show(o);
+}
+function openOverview() {
+  panel = 'overview';
+  placing = false;
+  select(null);
+}
 
+function deleteScene(o) {
+  if (SCENES.length < 2) return;
+  const refs = SCENES.reduce((n, x) => n + x.hotspots.filter(h => h.type === 'scene' && h.target === o.id).length, 0);
+  if (!confirm(`Xoá cảnh "${o.name}"?` + (refs ? ` ${refs} mũi tên trỏ tới cảnh này cũng sẽ bị xoá.` : ''))) return;
+  const idx = SCENES.indexOf(o);
+  SCENES.splice(idx, 1);
+  for (const x of SCENES) x.hotspots = x.hotspots.filter(h => !(h.type === 'scene' && h.target === o.id));
+  cache.delete(o.id);
+  saveDraft(); buildSceneBar();
+  if (current === o) show(SCENES[Math.min(idx, SCENES.length - 1)]);
+  else { buildHotspots(); renderEditor(); }
+}
+
+function overviewHTML() {
+  const s = displayed;
+  return `
     <h4>Logo dự án</h4>
-    ${data.logo ? `<img class="logo-preview" src="${esc(imgSrc(data.logo))}" alt="">` : '<p class="muted">Chưa có logo.</p>'}
-    <div class="row">
-      <label class="filepick" style="margin-top:0">${data.logo ? 'Đổi logo…' : 'Tải logo lên…'}<input type="file" accept="image/png,image/jpeg" data-logo></label>
-      ${data.logo ? '<button class="danger" data-act="removeLogo" style="flex:0 0 auto">Xoá</button>' : ''}
-    </div>
-    <p class="muted">PNG nền trong suốt hoặc JPEG.</p>
+    ${data.logo ? `
+      <div class="logo-box">
+        <img src="${esc(imgSrc(data.logo))}" alt="">
+        <div class="actions">
+          <label class="iconbtn" title="Đổi logo">${PENCIL}<input type="file" accept="image/png,image/jpeg" data-logo></label>
+          <button class="iconbtn danger" data-act="removeLogo" title="Xoá logo">${TRASH}</button>
+        </div>
+      </div>` : `
+      <label class="filepick big">Tải logo lên (PNG hoặc JPEG)…<input type="file" accept="image/png,image/jpeg" data-logo></label>`}
 
     <h4>Cảnh 360° (${SCENES.length})</h4>
     <ul class="scenes">${SCENES.map((o, i) => `<li data-scene="${i}" class="${o === s ? 'current' : ''}">
-      <span>${i + 1}. ${esc(o.name)}</span>
-      <button data-act="sceneUp" data-i="${i}" title="Lên"${i === 0 ? ' disabled' : ''}>↑</button>
-      <button data-act="sceneDown" data-i="${i}" title="Xuống"${i === SCENES.length - 1 ? ' disabled' : ''}>↓</button>
+      <span class="grip" title="Kéo để sắp xếp">${GRIP}</span>
+      <span>${esc(o.name)}</span>
+      <button class="iconbtn" data-act="editScene" data-i="${i}" title="Chỉnh sửa cảnh">${PENCIL}</button>
+      <button class="iconbtn danger" data-act="deleteScene" data-i="${i}" title="Xoá cảnh"${SCENES.length < 2 ? ' disabled' : ''}>${TRASH}</button>
     </li>`).join('')}</ul>
-    <label>Tên cảnh đang xem</label><input data-scene-f="name" value="${esc(s.name)}">
-    <label class="filepick">Thay ảnh 360° của cảnh này…<input type="file" accept="image/*" data-pano="replace"></label>
     <label class="filepick">+ Thêm cảnh mới (chọn ảnh 360°)…<input type="file" accept="image/*" data-pano="add"></label>
-    <button class="danger" data-act="deleteScene" style="width:100%;margin-top:6px"${SCENES.length < 2 ? ' disabled' : ''}>Xoá cảnh này</button>
-    <p class="muted">Ảnh 360° tự thu về tối đa 8192×4096. Nhớ bấm <b>Lưu lên server</b> sau khi sửa.</p>
+    <p class="muted">Ảnh 360° tự thu về tối đa 8192×4096.</p>`;
+}
+
+function sceneHTML() {
+  const s = displayed, h = selected;
+  const sceneOpts = (val) => SCENES.filter(o => o !== s)
+    .map(o => `<option value="${esc(o.id)}"${o.id === val ? ' selected' : ''}>${esc(o.name)}</option>`).join('');
+  return `
+    <button class="back" data-act="overview">← Tổng quan</button>
+    <h4>Cảnh 360°</h4>
+    <label style="margin-top:0">Tên cảnh</label><input data-scene-f="name" value="${esc(s.name)}">
+    <label class="filepick">Thay ảnh 360°…<input type="file" accept="image/*" data-pano="replace"></label>
 
     <h4>Khung hình mặc định</h4>
     <div class="readout">lon ${s.view.lon}° · lat ${s.view.lat}° · fov ${s.view.fov}°</div>
@@ -922,29 +972,36 @@ function renderEditor() {
           <label>Ảnh lớn</label><input data-f="image" value="${esc(h.image)}" placeholder="images/points/ten-anh.jpg">
           <label>Ảnh xem trước (tuỳ chọn, để trống = dùng ảnh lớn)</label><input data-f="thumb" value="${esc(h.thumb)}" placeholder="images/points/thumbs/ten-anh.jpg">
           <label class="filepick">Tải ảnh từ máy lên…<input type="file" accept="image/*" data-file></label>
-          <p class="muted">Ảnh được thu nhỏ rồi tải lên server. Nhớ bấm <b>Lưu lên server</b> sau đó.</p>
+          <p class="muted">Ảnh được thu nhỏ rồi tải lên server.</p>
         ` : `
           <label>Tiêu đề</label><input data-f="title" value="${esc(h.title)}">
           <label>Nội dung</label><textarea data-f="text">${esc(h.text)}</textarea>
         `}
         <label>Nhãn khi rê chuột (để trống = tự động)</label><input data-f="label" value="${esc(h.label)}">
-        <p class="muted">Vị trí: lon ${h.lon}° · lat ${h.lat}°. Kéo biểu tượng trên ảnh để di chuyển.</p>
+        <p class="muted">Vị trí: lon ${h.lon}° · lat ${h.lat}°. Kéo điểm trên ảnh để di chuyển.</p>
         <div class="row">
           <button data-act="lookAt">Nhìn tới</button>
           <button class="danger" data-act="delete">Xoá điểm</button>
         </div>
       </div>` : ''}
-    <button data-act="place" class="${placing ? 'on' : ''}" style="width:100%">${placing ? 'Bấm lên ảnh để đặt… (Esc huỷ)' : '+ Thêm điểm bấm'}</button>
+    <button data-act="place" class="${placing ? 'on' : ''}" style="width:100%">${placing ? 'Bấm lên ảnh để đặt… (Esc huỷ)' : '+ Thêm điểm bấm'}</button>`;
+}
 
-    <h4>Lưu</h4>
-    <p class="status"></p>
-    <button class="primary" data-act="save" style="width:100%;margin-bottom:6px">Lưu lên server (Ctrl+S)</button>
-    <div class="row">
-      <button data-act="discard">Bỏ thay đổi</button>
-      <button data-act="download">Tải bản sao JSON</button>
-    </div>
-    <p class="muted">Bỏ “?edit” khỏi địa chỉ để xem như khách.</p>
-  `;
+function renderEditor() {
+  if (!EDIT || !displayed) return;
+  const scroll = editor.querySelector('.body')?.scrollTop ?? 0, samePanel = editor.dataset.panel === panel;
+  editor.dataset.panel = panel;
+  editor.innerHTML = `
+    <div class="body">${panel === 'scene' ? sceneHTML() : overviewHTML()}</div>
+    <div class="foot">
+      <p class="status"></p>
+      <button class="primary" data-act="save" style="width:100%;margin-bottom:6px">Lưu lên server (Ctrl+S)</button>
+      <div class="row">
+        <button data-act="discard">Bỏ thay đổi</button>
+        <button data-act="download">Tải bản sao JSON</button>
+      </div>
+    </div>`;
+  if (samePanel) editor.querySelector('.body').scrollTop = scroll;
   updateStatus();
 }
 
@@ -958,28 +1015,16 @@ if (EDIT) {
     const li = e.target.closest('li[data-i]');
     if (li && !act) return select(displayed.hotspots[+li.dataset.i]);
     const sli = e.target.closest('li[data-scene]');
-    if (sli && !act) return show(SCENES[+sli.dataset.scene]);
+    if (sli && !act && !e.target.closest('.grip')) return openScenePanel(SCENES[+sli.dataset.scene]);
     const s = displayed;
     if (!act || !s) return;
     if (act === 'removeLogo') {
       delete data.logo;
       applyLogo(); saveDraft(); renderEditor();
-    } else if (act === 'sceneUp' || act === 'sceneDown') {
-      const i = +actEl.dataset.i, j = i + (act === 'sceneUp' ? -1 : 1);
-      if (!SCENES[j]) return;
-      [SCENES[i], SCENES[j]] = [SCENES[j], SCENES[i]];
-      saveDraft(); buildSceneBar(); renderEditor();
-    } else if (act === 'deleteScene') {
-      if (SCENES.length < 2) return;
-      const refs = SCENES.reduce((n, o) => n + o.hotspots.filter(h => h.type === 'scene' && h.target === s.id).length, 0);
-      if (!confirm(`Xoá cảnh "${s.name}"?` + (refs ? ` ${refs} mũi tên trỏ tới cảnh này cũng sẽ bị xoá.` : ''))) return;
-      const idx = SCENES.indexOf(s);
-      SCENES.splice(idx, 1);
-      for (const o of SCENES) o.hotspots = o.hotspots.filter(h => !(h.type === 'scene' && h.target === s.id));
-      cache.delete(s.id);
-      saveDraft(); buildSceneBar();
-      show(SCENES[Math.min(idx, SCENES.length - 1)]);
-    } else if (act === 'setView') {
+    } else if (act === 'overview') openOverview();
+    else if (act === 'editScene') openScenePanel(SCENES[+actEl.dataset.i]);
+    else if (act === 'deleteScene') deleteScene(SCENES[+actEl.dataset.i]);
+    else if (act === 'setView') {
       s.view = { lon: normLon(lon), lat: round1(lat), fov: Math.round(fov) };
       saveDraft(); renderEditor(); toast('Đã đặt khung hình mặc định cho ' + s.name);
     } else if (act === 'goView') applyView(s.view, true);
@@ -1009,8 +1054,6 @@ if (EDIT) {
     if (e.target.dataset.sceneF === 'name' && displayed) {
       displayed.name = e.target.value;
       saveDraft(); buildSceneBar(); buildHotspots();
-      const span = editor.querySelector('li.current span');
-      if (span) span.textContent = `${SCENES.indexOf(displayed) + 1}. ${displayed.name}`;
       return;
     }
     const f = e.target.dataset.f;
@@ -1037,8 +1080,8 @@ if (EDIT) {
       const file = e.target.files[0];
       if (!file) return;
       if (!/^image\/(png|jpeg)$/.test(file.type)) return toast('Logo cần là file PNG hoặc JPEG');
-      const pick = e.target.closest('.filepick');
-      pick.classList.add('busy'); pick.firstChild.textContent = 'Đang tải lên…';
+      (e.target.closest('.logo-box') || e.target.closest('.filepick')).classList.add('busy');
+      toast('Đang tải logo lên…');
       try {
         const png = file.type === 'image/png'; // giữ nền trong suốt
         const blob = await resizeImage(file, 800, 0.9, png ? 'image/png' : 'image/jpeg');
@@ -1073,6 +1116,7 @@ if (EDIT) {
           const n = { id, name: up.name, src: up.src, thumb: up.thumb, view: { lon: 0, lat: 0, fov: FOV_DEFAULT }, hotspots: [] };
           SCENES.push(n);
           saveDraft(); buildSceneBar();
+          panel = 'scene';
           await show(n);
           toast('Đã thêm cảnh. Đặt khung hình rồi bấm Lưu lên server');
         }
@@ -1101,6 +1145,35 @@ if (EDIT) {
       if (pick.isConnected) { pick.classList.remove('busy'); pick.firstChild.textContent = 'Tải ảnh từ máy lên…'; }
     }
   });
+
+  let dragLi = null;
+  editor.addEventListener('pointerdown', e => {
+    const grip = e.target.closest('.scenes .grip');
+    if (!grip) return;
+    e.preventDefault();
+    dragLi = grip.closest('li');
+    dragLi.classList.add('dragging');
+    grip.setPointerCapture(e.pointerId);
+  });
+  editor.addEventListener('pointermove', e => {
+    if (!dragLi) return;
+    const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('.scenes li');
+    if (!over || over === dragLi) return;
+    const r = over.getBoundingClientRect();
+    over.parentNode.insertBefore(dragLi, e.clientY < r.top + r.height / 2 ? over : over.nextSibling);
+  });
+  const endDrag = () => {
+    if (!dragLi) return;
+    const order = [...dragLi.parentNode.children].map(li => SCENES[+li.dataset.scene]);
+    dragLi = null;
+    if (order.some((o, i) => o !== SCENES[i])) {
+      SCENES.splice(0, SCENES.length, ...order);
+      saveDraft(); buildSceneBar();
+    }
+    renderEditor();
+  };
+  editor.addEventListener('pointerup', endDrag);
+  editor.addEventListener('pointercancel', endDrag);
 
   addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveToServer(); return; }
@@ -1141,11 +1214,7 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
   updateHotspots();
 
-  if (EDIT) {
-    syncPlacing();
-    const r = `Đang nhìn: lon ${normLon(lon)}° · lat ${round1(lat)}° · fov ${Math.round(camera.fov)}°`;
-    if (r !== lastReadout) { const el = document.getElementById('readout'); if (el) { el.textContent = r; lastReadout = r; } }
-  }
+  if (EDIT) syncPlacing();
 });
 
 show(byId(location.hash.slice(1)) || SCENES[0]);
