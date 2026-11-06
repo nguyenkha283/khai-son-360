@@ -1,0 +1,1214 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>VR360 Viewer</title>
+<style>
+  :root {
+    --bg: #0b0d10;
+    --panel: rgba(14, 17, 22, 0.62);
+    --panel-solid: rgba(14, 17, 22, 0.88);
+    --border: rgba(255, 255, 255, 0.14);
+    --text: #f2f4f7;
+    --muted: #a7b0bd;
+    --accent: #e8b04a;
+    --danger: #e5675c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #view { position: fixed; inset: 0; touch-action: none; cursor: grab; }
+  #view.dragging { cursor: grabbing; }
+  body.placing #view { cursor: crosshair; }
+  canvas { display: block; }
+
+  .glass { background: var(--panel); border: 1px solid var(--border);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 12px; }
+  .hidden { display: none !important; }
+
+  #logo { position: fixed; top: 16px; left: 16px; display: block; width: auto; height: auto; max-height: 56px;
+    max-width: min(40vw, 320px); pointer-events: none; }
+
+  #tools { position: fixed; top: 16px; right: 16px; display: flex; gap: 8px; }
+  #tools button { width: 42px; height: 42px; display: grid; place-items: center; color: var(--text); cursor: pointer; }
+  #tools button:hover { border-color: rgba(255,255,255,.35); }
+  #tools button.on { color: var(--accent); border-color: var(--accent); }
+  #tools svg { width: 20px; height: 20px; }
+
+  #scenes { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+    display: flex; gap: 10px; padding: 10px; max-width: calc(100vw - 32px); overflow-x: auto; }
+  #scenes button { flex: 0 0 auto; width: 150px; padding: 0; border: 2px solid transparent; border-radius: 9px;
+    background: none; color: var(--text); cursor: pointer; overflow: hidden; text-align: left; }
+  #scenes button img { display: block; width: 100%; aspect-ratio: 2 / 1; object-fit: cover; }
+  #scenes button.active { border-color: var(--accent); }
+  #scenes button:hover:not(.active) { border-color: rgba(255,255,255,.4); }
+
+  #loader { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 240px; padding: 16px;
+    text-align: center; font-size: 13px; color: var(--muted); transition: opacity .3s; }
+  #loader.faded { opacity: 0; pointer-events: none; }
+  #bar { height: 4px; margin-top: 10px; border-radius: 2px; background: rgba(255,255,255,.12); overflow: hidden; }
+  #bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+
+  #hint { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 10px 16px; font-size: 14px;
+    pointer-events: none; transition: opacity .6s; opacity: 0; }
+  #hint.show { opacity: 1; }
+
+  /* ---- Điểm bấm ---- */
+  #hotspots { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .hs { position: absolute; left: 0; top: 0; pointer-events: auto; cursor: pointer; user-select: none;
+    display: flex; flex-direction: column; align-items: center; gap: 6px; will-change: transform; }
+  .hs .dot { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+    background: rgba(14,17,22,.55); border: 2px solid #fff; color: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.4);
+    transition: transform .15s, background .15s; }
+  .hs .dot svg { width: 20px; height: 20px; }
+  .hs.scene .dot::after { content: ""; position: absolute; width: 40px; height: 40px; border-radius: 50%;
+    border: 2px solid #fff; animation: pulse 2s infinite; pointer-events: none; }
+  @keyframes pulse { from { transform: scale(1); opacity: .7; } to { transform: scale(1.8); opacity: 0; } }
+  .hs:hover .dot { transform: scale(1.12); background: var(--accent); }
+  .hs .label { font-size: 13px; padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+    background: rgba(14,17,22,.75); border: 1px solid var(--border); opacity: 0; transition: opacity .15s; }
+  .hs:hover .label, body.editing .hs .label { opacity: 1; }
+  body.editing .hs { cursor: move; }
+  .hs.selected .dot { background: var(--accent); border-color: var(--accent); }
+
+  #info { position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%); width: min(420px, calc(100vw - 32px));
+    padding: 16px 18px; background: var(--panel-solid); }
+  #info h3 { margin: 0 28px 8px 0; font-size: 17px; }
+  #info p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; white-space: pre-line; }
+  #info button { position: absolute; top: 10px; right: 10px; width: 28px; height: 28px; border: 0; border-radius: 8px;
+    background: rgba(255,255,255,.08); color: var(--text); font-size: 18px; cursor: pointer; }
+
+  /* ---- Điểm ảnh: popup xem trước + lightbox ---- */
+  .hs.scene { z-index: 1; }   /* mũi tên chuyển cảnh nằm trên các điểm ảnh */
+  .hs:hover { z-index: 3; }
+  #hotspots:has(.hs:hover) { z-index: 5; } /* popup nổi trên tiêu đề / thanh cảnh */
+  .hs.image .dot { border-color: var(--accent); }
+  .hs.image .dot svg { width: 19px; height: 19px; }
+  .hs .preview { position: absolute; left: 50%; bottom: calc(100% + 10px); width: 260px; padding: 6px;
+    background: var(--panel-solid); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.45);
+    transform: translateX(calc(-50% + var(--shift, 0px))) translateY(6px); opacity: 0; pointer-events: none;
+    transition: opacity .18s, transform .18s; }
+  .hs.below .preview { bottom: auto; top: 50px; transform: translateX(calc(-50% + var(--shift, 0px))) translateY(-6px); }
+  .hs .preview img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 8px; background: #1b1f26; }
+  .hs .preview span { display: block; padding: 8px 4px 0; font-size: 13px; font-weight: 600; }
+  .hs .preview small { display: block; padding: 2px 4px 2px; color: var(--muted); font-size: 12px; }
+  .hs .preview small:empty { display: none; }
+  .hs.image:hover .preview { opacity: 1; transform: translateX(calc(-50% + var(--shift, 0px))); }
+
+  /* Điểm ảnh / thông tin: ô nhãn có mũi tên nhỏ chỉ xuống đúng vị trí điểm */
+  .hs.pin .label { position: relative; opacity: 1; max-width: 240px; overflow: hidden; text-overflow: ellipsis;
+    padding: 6px 12px; font-weight: 500; background: var(--panel-solid); border-color: rgba(255,255,255,.3);
+    box-shadow: 0 2px 10px rgba(0,0,0,.35); transition: background .15s, color .15s; }
+  .hs.pin .tip { width: 0; height: 0; margin-top: -7px; border: 7px solid transparent; border-bottom-width: 0;
+    border-top-color: var(--panel-solid); transition: border-color .15s; }
+  .hs.pin:hover .label, .hs.pin.selected .label { background: var(--accent); color: #1a1406; border-color: var(--accent); }
+  .hs.pin:hover .tip, .hs.pin.selected .tip { border-top-color: var(--accent); }
+  .hs.pin.below .preview { top: calc(100% + 8px); }
+
+  #lightbox { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; gap: 14px;
+    padding: 60px 72px 20px; background: rgba(5, 6, 8, .93); opacity: 0; pointer-events: none; transition: opacity .2s; }
+  #lightbox.open { opacity: 1; pointer-events: auto; }
+  #lightbox figure { position: relative; flex: 1; min-height: 0; margin: 0; display: flex; align-items: center; justify-content: center; }
+  /* luôn lấp đầy khung (kể cả ảnh xem trước nhỏ hiện tạm trong lúc tải ảnh lớn) */
+  #lightbox figure img { width: 100%; height: 100%; object-fit: contain; }
+  #lightbox figure.loading::after { content: ""; position: absolute; width: 36px; height: 36px; border-radius: 50%;
+    border: 3px solid rgba(255,255,255,.25); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #lightbox .caption { text-align: center; }
+  #lightbox .caption strong { display: block; font-size: 17px; }
+  #lightbox .caption p { margin: 4px auto 0; max-width: 720px; color: var(--muted); font-size: 14px; line-height: 1.5; white-space: pre-line; }
+  #lightbox .caption p:empty { display: none; }
+  #lightbox .count { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  #lightbox button { position: absolute; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border);
+    background: rgba(255,255,255,.08); color: var(--text); cursor: pointer; display: grid; place-items: center; }
+  #lightbox button:hover { background: rgba(255,255,255,.18); }
+  #lightbox button svg { width: 22px; height: 22px; }
+  #lightbox .close { top: 12px; right: 12px; }
+  #lightbox .prev { left: 14px; top: 50%; transform: translateY(-50%); }
+  #lightbox .next { right: 14px; top: 50%; transform: translateY(-50%); }
+
+  /* ---- Trình chỉnh sửa ---- */
+  #editor { position: fixed; top: 70px; right: 16px; width: 300px; max-height: calc(100vh - 230px);
+    display: flex; flex-direction: column; overflow: hidden; background: var(--panel-solid); font-size: 13px; }
+  #editor .body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; }
+  #editor .foot { flex: 0 0 auto; padding: 10px 14px 12px; border-top: 1px solid var(--border); }
+  #editor .foot .status { margin: 0 0 8px; }
+  #editor .back { margin-bottom: 10px; padding: 5px 10px; }
+  #editor h4 { margin: 14px 0 8px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  #editor h4:first-child { margin-top: 0; }
+  #editor .row { display: flex; gap: 6px; margin-bottom: 6px; }
+  #editor .row > * { flex: 1; }
+  #editor button { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: rgba(255,255,255,.06);
+    color: var(--text); font: inherit; cursor: pointer; }
+  #editor button:hover { border-color: rgba(255,255,255,.35); }
+  #editor button.primary { background: var(--accent); border-color: var(--accent); color: #1a1406; font-weight: 600; }
+  #editor button.on { border-color: var(--accent); color: var(--accent); }
+  #editor button.danger { color: var(--danger); }
+  #editor label { display: block; margin: 8px 0 3px; color: var(--muted); font-size: 12px; }
+  #editor input, #editor select, #editor textarea { width: 100%; padding: 6px 8px; border-radius: 7px; font: inherit;
+    border: 1px solid var(--border); background: rgba(0,0,0,.35); color: var(--text); }
+  #editor textarea { resize: vertical; min-height: 60px; }
+  #editor .readout { font-family: ui-monospace, Consolas, monospace; color: var(--text); background: rgba(0,0,0,.3);
+    padding: 6px 8px; border-radius: 7px; margin-bottom: 6px; }
+  #editor .muted { color: var(--muted); font-size: 12px; line-height: 1.45; margin: 6px 0; }
+  #editor ul { list-style: none; margin: 0 0 6px; padding: 0; }
+  #editor li { padding: 6px 8px; border-radius: 7px; cursor: pointer; border: 1px solid transparent; }
+  #editor li:hover { background: rgba(255,255,255,.06); }
+  #editor li.selected { border-color: var(--accent); }
+  #editor .form { padding: 8px 10px 10px; border-radius: 8px; background: rgba(255,255,255,.04); margin-bottom: 6px; }
+  #editor .draft { color: var(--accent); }
+  #editor .filepick { display: block; margin-top: 8px; padding: 7px; text-align: center; color: var(--text); cursor: pointer;
+    border: 1px dashed rgba(255,255,255,.3); border-radius: 8px; font-size: 13px; }
+  #editor .filepick:hover { border-color: var(--accent); }
+  #editor .filepick input { display: none; }
+  #editor .status { margin: 6px 0; font-size: 12px; color: var(--muted); }
+  #editor .status.dirty { color: var(--accent); }
+  #editor .filepick.busy { opacity: .6; pointer-events: none; }
+  #editor .hslist li { display: flex; align-items: center; gap: 6px; }
+  #editor .hslist li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #editor .hslist li button { flex: 0 0 auto; padding: 3px 5px; display: grid; place-items: center; color: var(--muted); }
+  #editor .hslist li button:hover { color: var(--danger); border-color: var(--danger); }
+  #editor .hslist li button svg { width: 14px; height: 14px; }
+  #editor .iconbtn { flex: 0 0 auto; width: 28px; height: 28px; padding: 0; display: grid; place-items: center;
+    border-radius: 7px; border: 1px solid var(--border); background: rgba(255,255,255,.06); color: var(--muted); cursor: pointer; }
+  #editor .iconbtn:hover { color: var(--text); border-color: rgba(255,255,255,.35); }
+  #editor .iconbtn.danger:hover { color: var(--danger); border-color: var(--danger); }
+  #editor .iconbtn svg { width: 14px; height: 14px; }
+  #editor .iconbtn input { display: none; }
+  #editor .scenes li { display: flex; align-items: center; gap: 6px; padding: 5px 6px; }
+  #editor .scenes li span:not(.grip) { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #editor .scenes li.current { border-color: rgba(232,176,74,.5); }
+  #editor .scenes li.dragging { background: rgba(255,255,255,.1); border-color: var(--accent); }
+  #editor .grip { flex: 0 0 auto; display: grid; place-items: center; width: 18px; height: 28px; color: var(--muted);
+    cursor: grab; touch-action: none; }
+  #editor .grip:active { cursor: grabbing; }
+  #editor .grip svg { width: 14px; height: 14px; }
+  #editor .logo-box { position: relative; display: grid; place-items: center; min-height: 80px; padding: 12px; border-radius: 8px;
+    background: repeating-conic-gradient(#2c2f35 0 25%, #1f2227 0 50%) 0 0 / 16px 16px; }
+  #editor .logo-box img { display: block; max-width: 100%; max-height: 120px; }
+  #editor .logo-box .actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; }
+  #editor .logo-box .iconbtn { background: rgba(14,17,22,.85); }
+  #editor .busy { opacity: .6; pointer-events: none; }
+  #editor .filepick.big { margin-top: 0; padding: 28px 7px; }
+  #login { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(5,6,8,.7); }
+  #login form { width: min(320px, calc(100vw - 32px)); padding: 20px; background: var(--panel-solid); }
+  #login h3 { margin: 0 0 12px; font-size: 16px; }
+  #login input { width: 100%; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border); background: rgba(0,0,0,.35);
+    color: var(--text); font: inherit; }
+  #login button { width: 100%; margin-top: 10px; padding: 9px; border-radius: 8px; border: 0; background: var(--accent);
+    color: #1a1406; font: inherit; font-weight: 600; cursor: pointer; }
+  #login p { min-height: 18px; margin: 8px 0 0; color: var(--danger); font-size: 13px; }
+  #toast { position: fixed; left: 50%; top: 20px; transform: translateX(-50%); padding: 8px 14px; font-size: 13px;
+    background: var(--panel-solid); transition: opacity .3s; }
+  #toast.faded { opacity: 0; pointer-events: none; }
+
+  @media (max-width: 600px) {
+    #logo { top: 12px; left: 12px; max-height: 40px; }
+    #tools { top: 12px; right: 12px; }
+    #scenes { bottom: 12px; gap: 8px; padding: 8px; }
+    #scenes button { width: 110px; }
+    #info { bottom: 120px; }
+    #editor { left: 12px; right: 12px; width: auto; top: 64px; max-height: 45vh; }
+    #lightbox { padding: 60px 12px 16px; }
+    #lightbox .prev, #lightbox .next { top: auto; bottom: 16px; transform: none; }
+  }
+</style>
+<script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="view"></div>
+<div id="hotspots"></div>
+
+<img id="logo" class="hidden" alt="Logo dự án">
+
+<div id="tools">
+  <button id="btnRotate" class="glass" title="Tự động xoay (R)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>
+  </button>
+  <button id="btnFull" class="glass" title="Toàn màn hình (F)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+  </button>
+</div>
+
+<div id="scenes" class="glass"></div>
+
+<div id="info" class="glass hidden"><button title="Đóng">×</button><h3></h3><p></p></div>
+<div id="lightbox" aria-hidden="true">
+  <figure><img alt=""></figure>
+  <div class="caption"><strong></strong><p></p><div class="count"></div></div>
+  <button class="close" title="Đóng (Esc)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <button class="prev" title="Ảnh trước (←)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+  <button class="next" title="Ảnh sau (→)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+</div>
+<div id="editor" class="glass hidden"></div>
+<div id="toast" class="glass faded"></div>
+<div id="login" class="hidden"><form class="glass">
+  <h3>Đăng nhập quản trị</h3>
+  <input type="password" placeholder="Mật khẩu" autocomplete="current-password" required>
+  <button>Đăng nhập</button>
+  <p></p>
+</form></div>
+
+<div id="loader" class="glass faded"><span id="loaderText">Đang tải…</span><div id="bar"><i></i></div></div>
+<div id="hint" class="glass">Kéo để xoay · Cuộn / chụm để phóng to</div>
+
+<!-- Dữ liệu cảnh mặc định: chỉ dùng khi server chưa có dữ liệu (/api/scenes) -->
+<script type="application/json" id="scenes-data">
+{
+  "scenes": [
+    {
+      "id": "tongthe",
+      "name": "Tổng thể",
+      "src": "images/tongthe.jpg",
+      "thumb": "images/thumbs/tongthe.jpg",
+      "view": {"lon": 101.2, "lat": -10.9, "fov": 75},
+      "hotspots": [
+        {"type": "scene", "lon": 93, "lat": -27.3, "target": "facade"},
+        {"type": "scene", "lon": 105.9, "lat": -28.7, "target": "beboi"},
+        {"type": "image", "lon": 52, "lat": -1.8, "image": "images/points/01. Tong the hoang hon.jpg", "title": "01. Tong the hoang hon", "thumb": "images/points/thumbs/01. Tong the hoang hon.jpg"},
+        {"type": "image", "lon": -31.4, "lat": -10.7, "image": "images/points/02. Tong The Chieu Ta_ver3.jpg", "title": "02. Tong The Chieu Ta_ver3", "thumb": "images/points/thumbs/02. Tong The Chieu Ta_ver3.jpg"},
+        {"type": "image", "lon": 107.2, "lat": -28.5, "image": "images/points/03. Tien Ich Be Boi.jpeg", "title": "03. Tien Ich Be Boi", "thumb": "images/points/thumbs/03. Tien Ich Be Boi.jpeg"},
+        {"type": "image", "lon": 91.4, "lat": -23.1, "image": "images/points/04. Vuon Canh Quan Bieu Tuong Du An_ver2a.jpeg", "title": "04. Vuon Canh Quan Bieu Tuong Du An_ver2a", "thumb": "images/points/thumbs/04. Vuon Canh Quan Bieu Tuong Du An_ver2a.jpeg"},
+        {"type": "image", "lon": 76.6, "lat": -18.5, "image": "images/points/05. View Du An Nhin Thanh Pho.jpg", "title": "05. View Du An Nhin Thanh Pho", "thumb": "images/points/thumbs/05. View Du An Nhin Thanh Pho.jpg"},
+        {"type": "image", "lon": 68.6, "lat": -18.1, "image": "images/points/06 Tong The Dem copy.jpg", "title": "06 Tong The Dem copy", "thumb": "images/points/thumbs/06 Tong The Dem copy.jpg"},
+        {"type": "image", "lon": -17, "lat": -26.1, "image": "images/points/07. Tong the ngay.jpg", "title": "07. Tong the ngay", "thumb": "images/points/thumbs/07. Tong the ngay.jpg"},
+        {"type": "image", "lon": 93.6, "lat": 20.3, "image": "images/points/08. TopDown_260522_FIX_H copy.jpg", "title": "08. TopDown_260522_FIX_H copy", "thumb": "images/points/thumbs/08. TopDown_260522_FIX_H copy.jpg"},
+        {"type": "image", "lon": 107, "lat": -25.6, "image": "images/points/09. Noi that Sanh_OP4.jpg", "title": "09. Noi that Sanh_OP4", "thumb": "images/points/thumbs/09. Noi that Sanh_OP4.jpg"},
+        {"type": "image", "lon": 97.4, "lat": -30.4, "image": "images/points/10. Loi vao ham_Bieu tuong du an.jpg", "title": "10. Loi vao ham_Bieu tuong du an", "thumb": "images/points/thumbs/10. Loi vao ham_Bieu tuong du an.jpg"},
+        {"type": "image", "lon": 106.9, "lat": -32.8, "image": "images/points/11. Khu Vui Choi Sang Tao Tre Em.jpg", "title": "11. Khu Vui Choi Sang Tao Tre Em", "thumb": "images/points/thumbs/11. Khu Vui Choi Sang Tao Tre Em.jpg"},
+        {"type": "image", "lon": 79.9, "lat": -27.8, "image": "images/points/12_facade_khoi_de_TM.jpg", "title": "12_facade_khoi_de_TM", "thumb": "images/points/thumbs/12_facade_khoi_de_TM.jpg"},
+        {"type": "image", "lon": 106.9, "lat": -23, "image": "images/points/13. Tien ich Ban Cong.jpg", "title": "13. Tien ich Ban Cong", "thumb": "images/points/thumbs/13. Tien ich Ban Cong.jpg"},
+        {"type": "image", "lon": 105.2, "lat": -20, "image": "images/points/14. Noi Khu_OP2.jpg", "title": "14. Noi Khu_OP2", "thumb": "images/points/thumbs/14. Noi Khu_OP2.jpg"}
+      ]
+    },
+    {
+      "id": "facade",
+      "name": "Mặt tiền",
+      "src": "images/facade.jpg",
+      "thumb": "images/thumbs/facade.jpg",
+      "view": {"lon": 100.3, "lat": 3.1, "fov": 75},
+      "hotspots": []
+    },
+    {
+      "id": "beboi",
+      "name": "Bể bơi",
+      "src": "images/beboi.jpg",
+      "thumb": "images/thumbs/beboi.jpg",
+      "view": {"lon": 128.5, "lat": -10.7, "fov": 75},
+      "hotspots": []
+    }
+  ]
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+const FOV_MIN = 30, FOV_MAX = 100, FOV_DEFAULT = 75;
+const AUTO_SPEED = 0.03;          // độ / frame
+const IDLE_BEFORE_AUTO = 4000;    // ms
+const PW_KEY = 'vr360-admin';
+
+// ---- Dữ liệu cảnh: lấy từ server, nếu chưa có thì dùng khối #scenes-data ở trên ----
+const EDIT = new URLSearchParams(location.search).has('edit');
+let data, fromServer = false;
+try {
+  const res = await fetch('/api/scenes', { cache: 'no-store', signal: AbortSignal.timeout(6000) });
+  if (res.ok) { const d = await res.json(); if (Array.isArray(d.scenes) && d.scenes.length) { data = d; fromServer = true; } }
+} catch {}
+if (!data) data = JSON.parse(document.getElementById('scenes-data').textContent);
+const SCENES = data.scenes;
+SCENES.forEach(s => { s.hotspots ??= []; s.view ??= { lon: 0, lat: 0, fov: FOV_DEFAULT }; });
+const byId = id => SCENES.find(s => s.id === id);
+
+const container = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(FOV_DEFAULT, innerWidth / innerHeight, 0.1, 1100);
+
+const geometry = new THREE.SphereGeometry(500, 96, 64);
+geometry.scale(-1, 1, 1); // nhìn từ bên trong
+
+function makeSphere() {
+  const m = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
+  scene.add(m);
+  return m;
+}
+// Hai mặt cầu để chuyển cảnh mờ dần
+let front = makeSphere(), back = makeSphere();
+
+const maxTex = renderer.capabilities.maxTextureSize;
+const maxAniso = renderer.capabilities.getMaxAnisotropy();
+const cache = new Map();
+
+// ---- Toạ độ: lon (ngang, độ) / lat (dọc, độ) <-> hướng 3D ----
+const deg = THREE.MathUtils.radToDeg, rad = THREE.MathUtils.degToRad;
+function dirFrom(lon, lat, v = new THREE.Vector3()) {
+  return v.setFromSphericalCoords(1, rad(90 - lat), rad(-lon));
+}
+const raycaster = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function lonLatAt(x, y) {
+  ndc.set(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  const d = raycaster.ray.direction;
+  return { lon: round1(-deg(Math.atan2(d.x, d.z))), lat: round1(deg(Math.asin(THREE.MathUtils.clamp(d.y, -1, 1)))) };
+}
+const round1 = n => Math.round(n * 10) / 10;
+const normLon = l => round1(((l % 360) + 540) % 360 - 180);
+
+// ---- Tải ảnh có thanh tiến trình ----
+const loader = document.getElementById('loader');
+const loaderText = document.getElementById('loaderText');
+const barFill = document.querySelector('#bar i');
+
+async function loadTexture(s) {
+  if (cache.has(s.id)) return cache.get(s.id);
+  loader.classList.remove('faded');
+  loaderText.textContent = `Đang tải: ${s.name}`;
+  barFill.style.width = '0%';
+
+  const res = await fetch(imgSrc(s.src));
+  if (!res.ok) throw new Error(`${res.status} ${s.src}`);
+  const total = +res.headers.get('content-length') || 0;
+  const reader = res.body.getReader();
+  const chunks = []; let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value); got += value.length;
+    if (total) barFill.style.width = (got / total * 100).toFixed(1) + '%';
+  }
+  const blob = new Blob(chunks, { type: 'image/jpeg' });
+
+  // Thu nhỏ nếu GPU (ví dụ điện thoại) không hỗ trợ ảnh lớn
+  let bmp = await createImageBitmap(blob, { imageOrientation: 'flipY' });
+  if (bmp.width > maxTex) {
+    const w = maxTex, h = Math.round(maxTex * bmp.height / bmp.width);
+    bmp.close();
+    bmp = await createImageBitmap(blob, { imageOrientation: 'flipY', resizeWidth: w, resizeHeight: h, resizeQuality: 'high' });
+  }
+  const tex = new THREE.Texture(bmp);
+  tex.flipY = false; // đã lật khi decode
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = maxAniso;
+  tex.needsUpdate = true;
+  cache.set(s.id, tex);
+  loader.classList.add('faded');
+  return tex;
+}
+
+// ---- Điều khiển góc nhìn ----
+let lon = 0, lat = 0, targetLon = 0, targetLat = 0, fov = FOV_DEFAULT;
+let autoRotate = !EDIT, lastInteract = 0;
+const pointers = new Map();
+let pinchStart = 0, pinchFov = fov, downAt = null;
+
+container.addEventListener('pointerdown', e => {
+  container.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  container.classList.add('dragging');
+  downAt = pointers.size === 1 ? { x: e.clientX, y: e.clientY } : null;
+  if (pointers.size === 2) { pinchStart = pinchDist(); pinchFov = fov; }
+  interact();
+});
+container.addEventListener('pointermove', e => {
+  const p = pointers.get(e.pointerId);
+  if (!p) return;
+  if (pointers.size === 1) {
+    const k = fov / innerHeight; // tốc độ xoay theo mức zoom
+    targetLon -= (e.clientX - p.x) * k;
+    targetLat += (e.clientY - p.y) * k;
+  }
+  p.x = e.clientX; p.y = e.clientY;
+  if (pointers.size === 2 && pinchStart) setFov(pinchFov * pinchStart / pinchDist());
+  interact();
+});
+const endPointer = e => {
+  const wasClick = downAt && pointers.size === 1 && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) < 5;
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinchStart = 0;
+  if (!pointers.size) container.classList.remove('dragging');
+  if (wasClick && e.type === 'pointerup') onPanoClick(e.clientX, e.clientY);
+  downAt = null;
+};
+container.addEventListener('pointerup', endPointer);
+container.addEventListener('pointercancel', endPointer);
+container.addEventListener('wheel', e => { e.preventDefault(); setFov(fov + e.deltaY * 0.05); interact(); }, { passive: false });
+
+function pinchDist() {
+  const [a, b] = [...pointers.values()];
+  return Math.hypot(a.x - b.x, a.y - b.y) || 1;
+}
+function setFov(v) { fov = THREE.MathUtils.clamp(v, FOV_MIN, FOV_MAX); }
+function interact() { lastInteract = performance.now(); }
+
+function applyView(v, animate) {
+  targetLon = v.lon; targetLat = v.lat; setFov(v.fov ?? FOV_DEFAULT);
+  if (!animate) { lon = targetLon; lat = targetLat; camera.fov = fov; camera.updateProjectionMatrix(); }
+  interact();
+}
+
+addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select')) return;
+  if (lightbox.classList.contains('open')) {
+    if (e.key === 'Escape') closeLightbox();
+    else if (e.key === 'ArrowLeft') stepLightbox(-1);
+    else if (e.key === 'ArrowRight') stepLightbox(1);
+    return;
+  }
+  const step = 5;
+  if (e.key === 'ArrowLeft') targetLon -= step;
+  else if (e.key === 'ArrowRight') targetLon += step;
+  else if (e.key === 'ArrowUp') targetLat += step;
+  else if (e.key === 'ArrowDown') targetLat -= step;
+  else if (e.key === '+' || e.key === '=') setFov(fov - 5);
+  else if (e.key === '-') setFov(fov + 5);
+  else if (e.key === 'r' || e.key === 'R') return toggleRotate();
+  else if (e.key === 'f' || e.key === 'F') return toggleFull();
+  else if (e.key === 'Escape') { closeInfo(); if (EDIT) { placing = false; select(null); } return; }
+  else if (/^[1-9]$/.test(e.key) && SCENES[e.key - 1]) return show(SCENES[e.key - 1]);
+  else return;
+  interact();
+});
+
+// ---- Chuyển cảnh ----
+let current = null;   // cảnh được chọn (có thể đang tải)
+let displayed = null; // cảnh đang hiển thị
+let fade = 1;
+async function show(s) {
+  if (current === s) return;
+  current = s;
+  history.replaceState(null, '', location.search + '#' + s.id);
+  document.querySelectorAll('#scenes button').forEach(b => b.classList.toggle('active', b.dataset.id === s.id));
+  closeInfo();
+  try {
+    const tex = await loadTexture(s);
+    if (current !== s) return; // người dùng đã chọn cảnh khác trong lúc tải
+    [front, back] = [back, front];
+    front.material.map = tex;
+    front.material.needsUpdate = true;
+    front.renderOrder = 1; back.renderOrder = 0;
+    fade = 0;
+    displayed = s;
+    applyView(s.view, false);
+    buildHotspots();
+    if (EDIT) { selected = null; renderEditor(); }
+    // Preload các cảnh còn lại ở nền
+    SCENES.filter(o => !cache.has(o.id)).forEach(o => fetch(o.src).catch(() => {}));
+  } catch (err) {
+    loaderText.textContent = 'Không tải được ảnh: ' + err.message;
+    console.error(err);
+  }
+}
+
+// ---- Điểm bấm ----
+const ICONS = {
+  scene: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 11v6M12 7.5v.01"/></svg>',
+  image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>',
+};
+const TYPE_MARK = { scene: '➜', info: 'ⓘ', image: '▣' };
+const hsLayer = document.getElementById('hotspots');
+let hsEls = [];
+
+// Ảnh chọn từ máy trong chế độ ?edit chỉ có trong phiên này (đường dẫn -> object URL)
+const localFiles = new Map();
+const imgSrc = p => localFiles.get(p) || p;
+// "images/points/Khu bể bơi.jpg" -> "Khu bể bơi"
+const fileTitle = p => (p || '').split('/').pop().replace(/\.[^.]+$/, '');
+
+function hotspotLabel(h) {
+  if (h.label) return h.label;
+  if (h.type === 'scene') return byId(h.target)?.name ?? '(chưa chọn cảnh)';
+  if (h.type === 'image') return h.title || fileTitle(h.image) || 'Ảnh';
+  return h.title || 'Thông tin';
+}
+
+function buildHotspots() {
+  hsLayer.replaceChildren();
+  hsEls = (displayed?.hotspots ?? []).map(h => {
+    const el = document.createElement('div');
+    const type = ICONS[h.type] ? h.type : 'info', pin = type !== 'scene';
+    el.className = 'hs ' + type + (pin ? ' pin' : '');
+    el.innerHTML = pin ? '<div class="label"></div><div class="tip"></div>' : `<div class="dot">${ICONS[type]}</div><div class="label"></div>`;
+    el.querySelector('.label').textContent = hotspotLabel(h);
+    if (h.type === 'image') {
+      const pv = document.createElement('div');
+      pv.className = 'preview';
+      pv.innerHTML = '<img alt=""><span></span><small></small>';
+      pv.querySelector('span').textContent = hotspotLabel(h);
+      pv.querySelector('small').textContent = h.text || '';
+      el.prepend(pv);
+      // chỉ tải ảnh xem trước khi rê chuột lần đầu
+      el.addEventListener('pointerenter', () => {
+        const img = pv.querySelector('img'), src = imgSrc(h.thumb || h.image);
+        if (src && img.getAttribute('src') !== src) {
+          img.src = src;
+          if (h.thumb) new Image().src = imgSrc(h.image); // tải sẵn ảnh lớn cho lightbox
+        }
+      });
+    }
+    el.classList.toggle('selected', h === selected);
+    hsLayer.appendChild(el);
+    if (EDIT) attachHotspotDrag(el, h);
+    else el.addEventListener('click', () => activateHotspot(h));
+    return { el, h, pin };
+  });
+}
+
+function activateHotspot(h) {
+  if (h.type === 'scene') { const t = byId(h.target); if (t) show(t); }
+  else if (h.type === 'image') openLightbox(h);
+  else openInfo(h);
+}
+
+// ---- Lightbox ----
+const lightbox = document.getElementById('lightbox');
+const lbImg = lightbox.querySelector('figure img');
+let lbList = [], lbIndex = 0;
+
+function openLightbox(h) {
+  lbList = displayed.hotspots.filter(x => x.type === 'image' && x.image);
+  lbIndex = Math.max(0, lbList.indexOf(h));
+  renderLightbox();
+  lightbox.classList.add('open');
+  lightbox.setAttribute('aria-hidden', 'false');
+}
+function renderLightbox() {
+  const h = lbList[lbIndex];
+  if (!h) return;
+  // hiện ảnh xem trước ngay, đổi sang ảnh lớn khi tải xong
+  const fig = lightbox.querySelector('figure');
+  lbImg.src = imgSrc(h.thumb || h.image);
+  fig.classList.toggle('loading', !!h.thumb);
+  if (h.thumb) {
+    const full = new Image();
+    full.onload = full.onerror = () => {
+      if (lbList[lbIndex] !== h) return;
+      if (full.naturalWidth) lbImg.src = full.src;
+      fig.classList.remove('loading');
+    };
+    full.src = imgSrc(h.image);
+  }
+  lightbox.querySelector('.caption strong').textContent = hotspotLabel(h);
+  lightbox.querySelector('.caption p').textContent = h.text || '';
+  const many = lbList.length > 1;
+  lightbox.querySelector('.count').textContent = many ? `${lbIndex + 1} / ${lbList.length}` : '';
+  lightbox.querySelector('.prev').classList.toggle('hidden', !many);
+  lightbox.querySelector('.next').classList.toggle('hidden', !many);
+}
+function stepLightbox(d) {
+  if (lbList.length < 2) return;
+  lbIndex = (lbIndex + d + lbList.length) % lbList.length;
+  renderLightbox();
+}
+function closeLightbox() {
+  lightbox.classList.remove('open');
+  lightbox.setAttribute('aria-hidden', 'true');
+}
+lightbox.querySelector('.close').onclick = closeLightbox;
+lightbox.querySelector('.prev').onclick = () => stepLightbox(-1);
+lightbox.querySelector('.next').onclick = () => stepLightbox(1);
+lightbox.addEventListener('click', e => { if (e.target === lightbox || e.target.tagName === 'FIGURE') closeLightbox(); });
+
+const info = document.getElementById('info');
+function openInfo(h) {
+  info.querySelector('h3').textContent = h.title || '';
+  info.querySelector('p').textContent = h.text || '';
+  info.classList.remove('hidden');
+}
+function closeInfo() { info.classList.add('hidden'); }
+info.querySelector('button').onclick = closeInfo;
+
+const tmpV = new THREE.Vector3(), camDir = new THREE.Vector3();
+function updateHotspots() {
+  camera.getWorldDirection(camDir);
+  for (const { el, h, pin } of hsEls) {
+    dirFrom(h.lon, h.lat, tmpV);
+    const facing = tmpV.dot(camDir) > 0.05;
+    tmpV.project(camera);
+    if (!facing || Math.abs(tmpV.x) > 1.3 || Math.abs(tmpV.y) > 1.3) { el.style.display = 'none'; continue; }
+    el.style.display = '';
+    const x = (tmpV.x + 1) / 2 * innerWidth, y = (1 - tmpV.y) / 2 * innerHeight;
+    // mũi tên chuyển cảnh: neo ở tâm vòng tròn; ô nhãn: neo ở đầu mũi tên nhỏ bên dưới
+    el.style.transform = `translate(${x}px, ${y}px) ` + (pin ? 'translate(-50%, -100%)' : 'translate(-50%, -20px)');
+    if (h.type === 'image') {
+      // popup lật xuống dưới khi gần mép trên, và dịch ngang để không tràn màn hình
+      el.classList.toggle('below', y < 240);
+      const half = 138;
+      el.style.setProperty('--shift', `${Math.max(0, half - x) + Math.min(0, innerWidth - half - x)}px`);
+    }
+  }
+  hsLayer.style.opacity = fade;
+}
+
+// ---- Giao diện ----
+const bar = document.getElementById('scenes');
+function buildSceneBar() {
+  bar.replaceChildren();
+  SCENES.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.dataset.id = s.id;
+    b.title = `${s.name} (${i + 1})`;
+    b.innerHTML = `<img alt="">`;
+    b.querySelector('img').src = imgSrc(s.thumb || s.src);
+    b.classList.toggle('active', s === current);
+    b.onclick = () => EDIT ? openScenePanel(s) : show(s);
+    bar.appendChild(b);
+  });
+}
+buildSceneBar();
+
+const logoEl = document.getElementById('logo');
+function applyLogo() {
+  logoEl.classList.toggle('hidden', !data.logo);
+  if (data.logo) logoEl.src = imgSrc(data.logo); else logoEl.removeAttribute('src');
+}
+applyLogo();
+
+const btnRotate = document.getElementById('btnRotate');
+function toggleRotate() { autoRotate = !autoRotate; btnRotate.classList.toggle('on', autoRotate); }
+btnRotate.onclick = toggleRotate;
+btnRotate.classList.toggle('on', autoRotate);
+
+function toggleFull() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen?.();
+}
+document.getElementById('btnFull').onclick = toggleFull;
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+const hint = document.getElementById('hint');
+hint.classList.add('show');
+setTimeout(() => hint.classList.remove('show'), 3000);
+
+const toastEl = document.getElementById('toast');
+let toastTimer;
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.remove('faded');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.add('faded'), 2200);
+}
+
+// ---- Chế độ chỉnh sửa (?edit) ----
+const editor = document.getElementById('editor');
+let selected = null, placing = false, lastType = 'scene';
+
+let dirty = false, saving = false;
+let password = '';
+try { password = sessionStorage.getItem(PW_KEY) || ''; } catch {}
+
+// Đánh dấu có thay đổi chưa lưu lên server
+function saveDraft() {
+  dirty = true;
+  updateStatus();
+}
+function updateStatus() {
+  const el = editor.querySelector('.status');
+  if (!el) return;
+  el.classList.toggle('dirty', dirty);
+  el.textContent = saving ? 'Đang lưu…' : dirty ? '● Có thay đổi chưa lưu'
+    : fromServer ? '✓ Đã lưu trên server' : 'Server chưa có dữ liệu — bấm Lưu để lưu lần đầu';
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { ...opts.headers, 'x-admin-password': password } });
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 401) { showLogin('Phiên đăng nhập hết hạn, nhập lại mật khẩu'); }
+  if (!res.ok) throw new Error(body.error || `Lỗi ${res.status}`);
+  return body;
+}
+
+async function saveToServer() {
+  if (saving) return;
+  saving = true; updateStatus();
+  try {
+    await api('/api/scenes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
+    dirty = false; fromServer = true;
+    toast('Đã lưu lên server');
+  } catch (err) { toast('Không lưu được: ' + err.message); }
+  saving = false; updateStatus();
+}
+
+// Thu nhỏ ảnh về JPEG, cạnh dài tối đa `max` px
+async function resizeImage(file, max, quality, type = 'image/jpeg') {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close();
+  return new Promise((ok, fail) => c.toBlob(b => b ? ok(b) : fail(new Error('Không đọc được ảnh')), type, quality));
+}
+// Netlify Functions chỉ nhận ~6MB mỗi lần gửi -> ảnh lớn được cắt thành nhiều phần 4MB
+const CHUNK = 4 * 1024 * 1024;
+async function uploadImage(blob, name, onProgress) {
+  const parts = Math.ceil(blob.size / CHUNK);
+  const send = (q, i) => api('/api/upload?' + q, { method: 'POST', headers: { 'content-type': blob.type },
+    body: blob.slice(i * CHUNK, (i + 1) * CHUNK, blob.type) });
+  onProgress?.(0, parts);
+  const first = await send(`name=${encodeURIComponent(name)}&parts=${parts}`, 0);
+  for (let i = 1; i < parts; i++) {
+    onProgress?.(i, parts);
+    await send(`key=${encodeURIComponent(first.key)}&part=${i}`, i);
+  }
+  return first.url;
+}
+
+// Ảnh 360°: tối đa 8192×4096 như các ảnh có sẵn, giảm chất lượng nếu file vẫn quá nặng
+async function preparePano(file) {
+  let blob = await resizeImage(file, 8192, 0.85);
+  if (blob.size > 16 * 1024 * 1024) blob = await resizeImage(file, 8192, 0.75);
+  return blob;
+}
+
+// Tải ảnh 360° lên: trả về { src, thumb }
+async function uploadPano(file, setMsg) {
+  const name = fileTitle(file.name);
+  setMsg('Đang nén ảnh…');
+  const [full, thumb] = await Promise.all([preparePano(file), resizeImage(file, 480, 0.8)]);
+  const mb = (full.size / 1048576).toFixed(1);
+  const src = await uploadImage(full, name, (i, n) => setMsg(`Đang tải lên ${mb}MB… ${n > 1 ? `(phần ${i + 1}/${n})` : ''}`));
+  const thumbUrl = await uploadImage(thumb, name + '-thumb');
+  localFiles.set(src, URL.createObjectURL(full));
+  localFiles.set(thumbUrl, URL.createObjectURL(thumb));
+  return { src, thumb: thumbUrl, name };
+}
+
+// ---- Đăng nhập ----
+const loginEl = document.getElementById('login');
+function showLogin(msg = '') {
+  loginEl.querySelector('p').textContent = msg;
+  loginEl.classList.remove('hidden');
+  loginEl.querySelector('input').focus();
+}
+loginEl.querySelector('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const input = loginEl.querySelector('input'), btn = loginEl.querySelector('button'), msg = loginEl.querySelector('p');
+  btn.disabled = true; msg.textContent = '';
+  try {
+    const res = await fetch('/api/scenes?check=1', { method: 'POST', headers: { 'x-admin-password': input.value } });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || (res.status === 404 ? 'Chưa có server (cần deploy qua GitHub)' : `Lỗi ${res.status}`));
+    password = input.value;
+    try { sessionStorage.setItem(PW_KEY, password); } catch {}
+    loginEl.classList.add('hidden');
+    input.value = '';
+  } catch (err) { msg.textContent = err.message; }
+  btn.disabled = false;
+});
+
+function onPanoClick(x, y) {
+  if (!EDIT) return;
+  if (placing && displayed) {
+    const pos = lonLatAt(x, y);
+    // điểm mới cùng loại với điểm vừa sửa gần nhất
+    const h = { type: lastType, lon: pos.lon, lat: pos.lat };
+    if (lastType === 'scene') h.target = SCENES.find(s => s !== displayed)?.id ?? '';
+    displayed.hotspots.push(h);
+    placing = false;
+    saveDraft();
+    select(h);
+  } else if (selected) select(null);
+}
+
+const TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
+const PENCIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg>';
+const GRIP = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+let panel = 'overview'; // 'overview': logo + danh sách cảnh · 'scene': cài đặt riêng của cảnh đang xem
+const undoStack = []; // các điểm đã xoá: { scene, h, index }
+
+function deleteHotspot(h) {
+  const s = displayed, index = s?.hotspots.indexOf(h) ?? -1;
+  if (index < 0) return;
+  s.hotspots.splice(index, 1);
+  undoStack.push({ scene: s, h, index });
+  saveDraft();
+  select(selected === h ? null : selected);
+  toast('Đã xoá điểm · Ctrl+Z để hoàn tác');
+}
+function undoDelete() {
+  let u;
+  do u = undoStack.pop(); while (u && !SCENES.includes(u.scene)); // bỏ qua điểm thuộc cảnh đã xoá
+  if (!u) return toast('Không còn gì để hoàn tác');
+  u.scene.hotspots.splice(Math.min(u.index, u.scene.hotspots.length), 0, u.h);
+  saveDraft();
+  if (displayed !== u.scene) show(u.scene).then(() => select(u.h));
+  else select(u.h);
+  toast('Đã khôi phục điểm');
+}
+
+function select(h) {
+  selected = h;
+  buildHotspots();
+  renderEditor();
+}
+
+function attachHotspotDrag(el, h) {
+  let start = null;
+  el.addEventListener('pointerdown', e => {
+    e.stopPropagation();
+    el.setPointerCapture(e.pointerId);
+    dirFrom(h.lon, h.lat, tmpV).project(camera);
+    const ax = (tmpV.x + 1) / 2 * innerWidth, ay = (1 - tmpV.y) / 2 * innerHeight;
+    start = { x: e.clientX, y: e.clientY, dx: ax - e.clientX, dy: ay - e.clientY, moved: false };
+  });
+  el.addEventListener('pointermove', e => {
+    if (!start) return;
+    if (!start.moved && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 4) return;
+    start.moved = true;
+    // giữ nguyên khoảng cách giữa con trỏ và điểm neo
+    Object.assign(h, lonLatAt(e.clientX + start.dx, e.clientY + start.dy));
+  });
+  el.addEventListener('pointerup', () => {
+    if (!start) return;
+    const moved = start.moved; start = null;
+    if (moved) { saveDraft(); if (selected === h) renderEditor(); else select(h); }
+    else select(h);
+  });
+}
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function openScenePanel(o) {
+  panel = 'scene';
+  if (current === o) renderEditor(); else show(o);
+}
+function openOverview() {
+  panel = 'overview';
+  placing = false;
+  select(null);
+}
+
+function deleteScene(o) {
+  if (SCENES.length < 2) return;
+  const refs = SCENES.reduce((n, x) => n + x.hotspots.filter(h => h.type === 'scene' && h.target === o.id).length, 0);
+  if (!confirm(`Xoá cảnh "${o.name}"?` + (refs ? ` ${refs} mũi tên trỏ tới cảnh này cũng sẽ bị xoá.` : ''))) return;
+  const idx = SCENES.indexOf(o);
+  SCENES.splice(idx, 1);
+  for (const x of SCENES) x.hotspots = x.hotspots.filter(h => !(h.type === 'scene' && h.target === o.id));
+  cache.delete(o.id);
+  saveDraft(); buildSceneBar();
+  if (current === o) show(SCENES[Math.min(idx, SCENES.length - 1)]);
+  else { buildHotspots(); renderEditor(); }
+}
+
+function overviewHTML() {
+  const s = displayed;
+  return `
+    <h4>Logo dự án</h4>
+    ${data.logo ? `
+      <div class="logo-box">
+        <img src="${esc(imgSrc(data.logo))}" alt="">
+        <div class="actions">
+          <label class="iconbtn" title="Đổi logo">${PENCIL}<input type="file" accept="image/png,image/jpeg" data-logo></label>
+          <button class="iconbtn danger" data-act="removeLogo" title="Xoá logo">${TRASH}</button>
+        </div>
+      </div>` : `
+      <label class="filepick big">Tải logo lên (PNG hoặc JPEG)…<input type="file" accept="image/png,image/jpeg" data-logo></label>`}
+
+    <h4>Cảnh 360° (${SCENES.length})</h4>
+    <ul class="scenes">${SCENES.map((o, i) => `<li data-scene="${i}" class="${o === s ? 'current' : ''}">
+      <span class="grip" title="Kéo để sắp xếp">${GRIP}</span>
+      <span>${esc(o.name)}</span>
+      <button class="iconbtn" data-act="editScene" data-i="${i}" title="Chỉnh sửa cảnh">${PENCIL}</button>
+      <button class="iconbtn danger" data-act="deleteScene" data-i="${i}" title="Xoá cảnh"${SCENES.length < 2 ? ' disabled' : ''}>${TRASH}</button>
+    </li>`).join('')}</ul>
+    <label class="filepick">+ Thêm cảnh mới (chọn ảnh 360°)…<input type="file" accept="image/*" data-pano="add"></label>
+    <p class="muted">Ảnh 360° tự thu về tối đa 8192×4096.</p>`;
+}
+
+function sceneHTML() {
+  const s = displayed, h = selected;
+  const sceneOpts = (val) => SCENES.filter(o => o !== s)
+    .map(o => `<option value="${esc(o.id)}"${o.id === val ? ' selected' : ''}>${esc(o.name)}</option>`).join('');
+  return `
+    <button class="back" data-act="overview">← Tổng quan</button>
+    <h4>Cảnh 360°</h4>
+    <label style="margin-top:0">Tên cảnh</label><input data-scene-f="name" value="${esc(s.name)}">
+    <label class="filepick">Thay ảnh 360°…<input type="file" accept="image/*" data-pano="replace"></label>
+
+    <h4>Khung hình mặc định</h4>
+    <div class="readout">lon ${s.view.lon}° · lat ${s.view.lat}° · fov ${s.view.fov}°</div>
+    <div class="row">
+      <button class="primary" data-act="setView">Đặt khung hiện tại</button>
+      <button data-act="goView">Xem lại</button>
+    </div>
+
+    <h4>Điểm bấm (${s.hotspots.length})</h4>
+    <ul class="hslist">${s.hotspots.map((x, i) => `<li data-i="${i}" class="${x === h ? 'selected' : ''}">
+      <span>${TYPE_MARK[x.type] ?? 'ⓘ'} ${esc(hotspotLabel(x))}</span>
+      <button data-act="delHs" data-i="${i}" title="Xoá điểm (Delete)">${TRASH}</button>
+    </li>`).join('')}</ul>
+    ${s.hotspots.length ? '<p class="muted">Chọn điểm rồi bấm Delete để xoá · Ctrl+Z để hoàn tác.</p>' : ''}
+    ${h ? `
+      <div class="form">
+        <label>Loại</label>
+        <select data-f="type">
+          <option value="scene"${h.type === 'scene' ? ' selected' : ''}>Chuyển sang cảnh khác</option>
+          <option value="info"${h.type === 'info' ? ' selected' : ''}>Hiện thông tin</option>
+          <option value="image"${h.type === 'image' ? ' selected' : ''}>Ảnh (rê chuột xem trước, bấm phóng to)</option>
+        </select>
+        ${h.type === 'scene' ? `
+          <label>Đi tới cảnh</label><select data-f="target">${sceneOpts(h.target)}</select>
+        ` : h.type === 'image' ? `
+          <label>Tiêu đề (để trống = dùng tên file ảnh)</label><input data-f="title" value="${esc(h.title)}" placeholder="${esc(fileTitle(h.image))}">
+          <label>Mô tả ngắn (tuỳ chọn)</label><textarea data-f="text">${esc(h.text)}</textarea>
+          <label>Ảnh lớn</label><input data-f="image" value="${esc(h.image)}" placeholder="images/points/ten-anh.jpg">
+          <label>Ảnh xem trước (tuỳ chọn, để trống = dùng ảnh lớn)</label><input data-f="thumb" value="${esc(h.thumb)}" placeholder="images/points/thumbs/ten-anh.jpg">
+          <label class="filepick">Tải ảnh từ máy lên…<input type="file" accept="image/*" data-file></label>
+          <p class="muted">Ảnh được thu nhỏ rồi tải lên server.</p>
+        ` : `
+          <label>Tiêu đề</label><input data-f="title" value="${esc(h.title)}">
+          <label>Nội dung</label><textarea data-f="text">${esc(h.text)}</textarea>
+        `}
+        <label>Nhãn khi rê chuột (để trống = tự động)</label><input data-f="label" value="${esc(h.label)}">
+        <p class="muted">Vị trí: lon ${h.lon}° · lat ${h.lat}°. Kéo điểm trên ảnh để di chuyển.</p>
+        <div class="row">
+          <button data-act="lookAt">Nhìn tới</button>
+          <button class="danger" data-act="delete">Xoá điểm</button>
+        </div>
+      </div>` : ''}
+    <button data-act="place" class="${placing ? 'on' : ''}" style="width:100%">${placing ? 'Bấm lên ảnh để đặt… (Esc huỷ)' : '+ Thêm điểm bấm'}</button>`;
+}
+
+function renderEditor() {
+  if (!EDIT || !displayed) return;
+  const scroll = editor.querySelector('.body')?.scrollTop ?? 0, samePanel = editor.dataset.panel === panel;
+  editor.dataset.panel = panel;
+  editor.innerHTML = `
+    <div class="body">${panel === 'scene' ? sceneHTML() : overviewHTML()}</div>
+    <div class="foot">
+      <p class="status"></p>
+      <button class="primary" data-act="save" style="width:100%;margin-bottom:6px">Lưu lên server (Ctrl+S)</button>
+      <button data-act="discard" style="width:100%">Bỏ thay đổi</button>
+    </div>`;
+  if (samePanel) editor.querySelector('.body').scrollTop = scroll;
+  updateStatus();
+}
+
+if (EDIT) {
+  document.body.classList.add('editing');
+  editor.classList.remove('hidden');
+
+  editor.addEventListener('click', e => {
+    const actEl = e.target.closest('[data-act]');
+    const act = actEl?.dataset.act;
+    const li = e.target.closest('li[data-i]');
+    if (li && !act) return select(displayed.hotspots[+li.dataset.i]);
+    const sli = e.target.closest('li[data-scene]');
+    if (sli && !act && !e.target.closest('.grip')) return openScenePanel(SCENES[+sli.dataset.scene]);
+    const s = displayed;
+    if (!act || !s) return;
+    if (act === 'removeLogo') {
+      delete data.logo;
+      applyLogo(); saveDraft(); renderEditor();
+    } else if (act === 'overview') openOverview();
+    else if (act === 'editScene') openScenePanel(SCENES[+actEl.dataset.i]);
+    else if (act === 'deleteScene') deleteScene(SCENES[+actEl.dataset.i]);
+    else if (act === 'setView') {
+      s.view = { lon: normLon(lon), lat: round1(lat), fov: Math.round(fov) };
+      saveDraft(); renderEditor(); toast('Đã đặt khung hình mặc định cho ' + s.name);
+    } else if (act === 'goView') applyView(s.view, true);
+    else if (act === 'lookAt' && selected) {
+      // chọn hướng gần nhất với góc hiện tại để không quay vòng
+      targetLon = lon + (((selected.lon - lon) % 360) + 540) % 360 - 180;
+      targetLat = selected.lat; interact();
+    } else if (act === 'delHs') deleteHotspot(s.hotspots[+actEl.dataset.i]);
+    else if (act === 'delete' && selected) {
+      deleteHotspot(selected);
+    } else if (act === 'place') {
+      placing = !placing; document.body.classList.toggle('placing', placing); renderEditor();
+    } else if (act === 'save') saveToServer();
+    else if (act === 'discard') {
+      if (dirty && !confirm('Bỏ mọi thay đổi chưa lưu?')) return;
+      dirty = false;
+      location.reload();
+    }
+  });
+
+  editor.addEventListener('input', e => {
+    if (e.target.dataset.sceneF === 'name' && displayed) {
+      displayed.name = e.target.value;
+      saveDraft(); buildSceneBar(); buildHotspots();
+      return;
+    }
+    const f = e.target.dataset.f;
+    if (!f || !selected) return;
+    const v = e.target.value;
+    if (v) selected[f] = v; else delete selected[f];
+    saveDraft();
+    buildHotspots();
+    if (f === 'type') {
+      const keep = { scene: ['target'], info: ['title', 'text'], image: ['title', 'text', 'image', 'thumb'] }[v] ?? [];
+      for (const k of ['target', 'title', 'text', 'image', 'thumb']) if (!keep.includes(k)) delete selected[k];
+      if (v === 'scene') selected.target ??= SCENES.find(o => o !== displayed)?.id;
+      lastType = v;
+      saveDraft(); buildHotspots();
+      renderEditor();
+    } else {
+      const span = editor.querySelector('.hslist li.selected span');
+      if (span) span.textContent = (TYPE_MARK[selected.type] ?? 'ⓘ') + ' ' + hotspotLabel(selected);
+    }
+  });
+
+  editor.addEventListener('change', async e => {
+    if (e.target.matches('[data-logo]')) {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (!/^image\/(png|jpeg)$/.test(file.type)) return toast('Logo cần là file PNG hoặc JPEG');
+      (e.target.closest('.logo-box') || e.target.closest('.filepick')).classList.add('busy');
+      toast('Đang tải logo lên…');
+      try {
+        const png = file.type === 'image/png'; // giữ nền trong suốt
+        const blob = await resizeImage(file, 800, 0.9, png ? 'image/png' : 'image/jpeg');
+        const url = await uploadImage(blob, 'logo');
+        localFiles.set(url, URL.createObjectURL(blob));
+        data.logo = url;
+        applyLogo(); saveDraft();
+        toast('Đã tải logo lên. Nhớ bấm Lưu lên server');
+      } catch (err) { toast('Không tải được logo: ' + err.message); }
+      renderEditor();
+      return;
+    }
+    const mode = e.target.dataset.pano;
+    if (mode) {
+      const file = e.target.files[0], s = displayed;
+      if (!file || !s) return;
+      const pick = e.target.closest('.filepick'), label = pick.firstChild.textContent;
+      pick.classList.add('busy');
+      editor.querySelectorAll('[data-pano]').forEach(x => x.disabled = true);
+      try {
+        const up = await uploadPano(file, m => { if (pick.isConnected) pick.firstChild.textContent = m; });
+        if (mode === 'replace') {
+          Object.assign(s, { src: up.src, thumb: up.thumb });
+          cache.delete(s.id);
+          saveDraft(); buildSceneBar();
+          current = null; await show(s);
+          toast('Đã thay ảnh. Nhớ bấm Lưu lên server');
+        } else {
+          let id = up.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'canh';
+          while (byId(id)) id += '-2';
+          const n = { id, name: up.name, src: up.src, thumb: up.thumb, view: { lon: 0, lat: 0, fov: FOV_DEFAULT }, hotspots: [] };
+          SCENES.push(n);
+          saveDraft(); buildSceneBar();
+          panel = 'scene';
+          await show(n);
+          toast('Đã thêm cảnh. Đặt khung hình rồi bấm Lưu lên server');
+        }
+      } catch (err) {
+        toast('Không tải được ảnh: ' + err.message);
+        renderEditor();
+      }
+      return;
+    }
+    if (!e.target.matches('[data-file]') || !selected) return;
+    const file = e.target.files[0], h = selected;
+    if (!file) return;
+    const pick = e.target.closest('.filepick');
+    pick.classList.add('busy'); pick.firstChild.textContent = 'Đang tải ảnh lên…';
+    try {
+      const name = fileTitle(file.name);
+      // 2 bản như ảnh có sẵn: 2880px cho lightbox, 560px cho popup xem trước
+      const [full, thumb] = await Promise.all([resizeImage(file, 2880, 0.85), resizeImage(file, 560, 0.8)]);
+      const [image, thumbUrl] = await Promise.all([uploadImage(full, name), uploadImage(thumb, name + '-thumb')]);
+      localFiles.set(image, URL.createObjectURL(full));
+      Object.assign(h, { image, thumb: thumbUrl, title: h.title || name });
+      saveDraft(); buildHotspots(); if (selected === h) renderEditor();
+      toast('Đã tải ảnh lên. Nhớ bấm Lưu lên server');
+    } catch (err) {
+      toast('Không tải được ảnh: ' + err.message);
+      if (pick.isConnected) { pick.classList.remove('busy'); pick.firstChild.textContent = 'Tải ảnh từ máy lên…'; }
+    }
+  });
+
+  let dragLi = null;
+  editor.addEventListener('pointerdown', e => {
+    const grip = e.target.closest('.scenes .grip');
+    if (!grip) return;
+    e.preventDefault();
+    dragLi = grip.closest('li');
+    dragLi.classList.add('dragging');
+    grip.setPointerCapture(e.pointerId);
+  });
+  editor.addEventListener('pointermove', e => {
+    if (!dragLi) return;
+    const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('.scenes li');
+    if (!over || over === dragLi) return;
+    const r = over.getBoundingClientRect();
+    over.parentNode.insertBefore(dragLi, e.clientY < r.top + r.height / 2 ? over : over.nextSibling);
+  });
+  const endDrag = () => {
+    if (!dragLi) return;
+    const order = [...dragLi.parentNode.children].map(li => SCENES[+li.dataset.scene]);
+    dragLi = null;
+    if (order.some((o, i) => o !== SCENES[i])) {
+      SCENES.splice(0, SCENES.length, ...order);
+      saveDraft(); buildSceneBar();
+    }
+    renderEditor();
+  };
+  editor.addEventListener('pointerup', endDrag);
+  editor.addEventListener('pointercancel', endDrag);
+
+  addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveToServer(); return; }
+    if (e.target.closest('input, textarea, select') || !loginEl.classList.contains('hidden')) return;
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selected) { e.preventDefault(); deleteHotspot(selected); }
+    else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undoDelete(); }
+  });
+  addEventListener('beforeunload', e => { if (dirty) e.preventDefault(); });
+  if (!password) showLogin();
+}
+
+// placing được đặt lại khi đặt xong / Esc
+const syncPlacing = () => document.body.classList.toggle('placing', placing);
+
+// ---- Vòng lặp render ----
+const target = new THREE.Vector3();
+renderer.setAnimationLoop(() => {
+  if (autoRotate && !pointers.size && performance.now() - lastInteract > IDLE_BEFORE_AUTO) targetLon += AUTO_SPEED;
+  targetLat = THREE.MathUtils.clamp(targetLat, -85, 85);
+  lon += (targetLon - lon) * 0.15;
+  lat += (targetLat - lat) * 0.15;
+
+  if (Math.abs(camera.fov - fov) > 0.01) {
+    camera.fov += (fov - camera.fov) * 0.2;
+    camera.updateProjectionMatrix();
+  }
+
+  if (fade < 1) {
+    fade = Math.min(1, fade + 0.04);
+    front.material.opacity = fade;
+    back.material.opacity = 1 - fade;
+  } else { front.material.opacity = 1; back.material.opacity = 0; }
+  front.visible = true;
+  back.visible = back.material.opacity > 0;
+
+  target.copy(dirFrom(lon, lat));
+  camera.lookAt(target);
+  renderer.render(scene, camera);
+  updateHotspots();
+
+  if (EDIT) syncPlacing();
+});
+
+show(byId(location.hash.slice(1)) || SCENES[0]);
+</script>
+</body>
+</html>

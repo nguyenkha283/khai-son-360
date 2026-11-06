@@ -3,8 +3,8 @@ import { checkAuth, json } from '../lib/auth.mjs';
 
 const MAX = 5 * 1024 * 1024; // giới hạn body của Netlify Functions là ~6MB, ảnh lớn hơn được gửi thành nhiều phần
 const MAX_PARTS = 10;
-const TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
-const KEY_RE = /^[a-z0-9]+-[A-Za-z0-9_-]+\.(jpg|png|webp)$/;
+const TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'audio/mpeg': 'mp3' };
+const KEY_RE = /^[a-z0-9]+-[A-Za-z0-9_-]+\.(jpg|png|webp|mp3)$/;
 
 // POST /api/upload?name=ten-anh                         (body = cả file ảnh)      -> { url }
 // POST /api/upload?name=ten-anh&parts=3                 (body = phần 0)           -> { url, key }
@@ -16,7 +16,7 @@ export default async (req) => {
 
   const type = (req.headers.get('content-type') || '').split(';')[0];
   const ext = TYPES[type];
-  if (!ext) return json({ error: 'Chỉ nhận ảnh JPG, PNG, WEBP' }, 415);
+  if (!ext) return json({ error: 'Chỉ nhận ảnh JPG, PNG, WEBP hoặc nhạc MP3' }, 415);
   const buf = await req.arrayBuffer();
   if (!buf.byteLength) return json({ error: 'File rỗng' }, 400);
   if (buf.byteLength > MAX) return json({ error: 'Phần gửi lên quá lớn (tối đa 5MB)' }, 413);
