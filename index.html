@@ -56,13 +56,15 @@
 
   /* Thanh menu phía dưới */
   #menu { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; align-items: center;
-    gap: 4px; padding: 6px 8px; max-width: calc(100vw - 180px); overflow-x: auto; border-radius: 14px;
-    scrollbar-width: none; }
+    gap: 6px; height: 64px; padding: 8px 12px; max-width: calc(100vw - 200px); overflow-x: auto; border-radius: 18px;
+    background: rgba(255,255,255,.22); border: 1px solid rgba(255,255,255,.4); box-shadow: 0 6px 24px rgba(0,0,0,.18);
+    backdrop-filter: blur(16px) saturate(140%); -webkit-backdrop-filter: blur(16px) saturate(140%); scrollbar-width: none; }
   #menu::-webkit-scrollbar { display: none; }
-  #menu .menu-logo { flex: 0 0 auto; display: block; max-height: 34px; max-width: 150px; margin: 0 10px 0 6px; }
-  #menu .sep { flex: 0 0 auto; width: 1px; height: 22px; background: rgba(255,255,255,.3); }
-  #menu button { flex: 0 0 auto; padding: 9px 20px; border: 0; border-radius: 999px; background: none; color: rgba(255,255,255,.85);
-    font: inherit; font-size: 15px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background .2s, color .2s; }
+  #menu .menu-logo { flex: 0 0 auto; display: block; max-height: 42px; max-width: 170px; margin: 0 12px 0 6px; }
+  #menu .sep { flex: 0 0 auto; width: 1px; height: 26px; background: rgba(255,255,255,.55); }
+  #menu button { flex: 0 0 auto; padding: 11px 26px; border: 0; border-radius: 999px; background: none; color: #fff;
+    font: inherit; font-size: 17px; font-weight: 600; white-space: nowrap; cursor: pointer; text-shadow: 0 1px 4px rgba(0,0,0,.45);
+    transition: background .2s, color .2s; }
   #menu button:hover { color: #fff; background: rgba(255,255,255,.1); }
   #menu button.active { color: #fff; background: var(--grad); box-shadow: 0 2px 10px rgba(0,0,0,.25); }
 
@@ -75,7 +77,7 @@
   #tools button:hover, #tools a:hover { background: rgba(255,255,255,.14); }
   #tools button.on { color: var(--g1); background: rgba(255,255,255,.9); }
   #tools svg { width: 19px; height: 19px; }
-  #btnUi { position: fixed; right: 14px; bottom: 14px; width: 46px; height: 46px; display: grid; place-items: center; border: 0;
+  #btnUi { position: fixed; right: 14px; bottom: 72px; /* chừa chỗ cho badge "Powered by Netlify" */ width: 46px; height: 46px; display: grid; place-items: center; border: 0;
     border-radius: 50%; background: var(--grad); color: #fff; cursor: pointer; box-shadow: 0 3px 12px rgba(0,0,0,.35); }
   #btnUi svg { width: 20px; height: 20px; }
 
@@ -155,8 +157,8 @@
     background: rgba(255,255,255,.08); color: var(--text); font-size: 18px; cursor: pointer; }
 
   /* ---- Điểm ảnh: popup xem trước + lightbox ---- */
-  .hs.scene { z-index: 1; }   /* mũi tên chuyển cảnh nằm trên các điểm ảnh */
-  .hs:hover { z-index: 3; }
+  /* thứ tự lớp đặt bằng z-index theo danh sách điểm (dòng trên = lớp trên); điểm đang rê chuột luôn nổi lên trên */
+  .hs:hover { z-index: 9999 !important; }
   #hotspots:has(.hs:hover) { z-index: 5; } /* popup nổi trên tiêu đề / thanh cảnh */
   .hs.image .dot { border-color: var(--accent); }
   .hs.image .dot svg { width: 19px; height: 19px; }
@@ -176,7 +178,7 @@
   .hs.pin .label { position: relative; opacity: 1; max-width: 300px; overflow: hidden; text-overflow: ellipsis;
     padding: 7px 16px; font-size: 13px; font-weight: 600; color: #fff; background: var(--grad); border: 0;
     box-shadow: 0 3px 12px rgba(0,0,0,.35); transition: transform .15s, filter .15s; }
-  .hs.pin .pole { width: 1.5px; height: var(--pole, 40px); background: rgba(255,255,255,.9); box-shadow: 0 0 3px rgba(0,0,0,.45); }
+  .hs.pin .pole { flex: 0 0 auto; width: 2px; height: var(--pole, 40px); background: rgba(255,255,255,.85); }
   .hs.pin .pt { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; background: rgba(255,255,255,.35);
     box-shadow: 0 0 4px rgba(0,0,0,.5); }
   .hs.pin .badge { padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.92); box-shadow: 0 3px 12px rgba(0,0,0,.35);
@@ -246,11 +248,14 @@
   #editor .status { margin: 6px 0; font-size: 12px; color: var(--muted); }
   #editor .status.dirty { color: var(--accent); }
   #editor .filepick.busy { opacity: .6; pointer-events: none; }
-  #editor .hslist li { display: flex; align-items: center; gap: 6px; }
+  #editor .hslist li { display: flex; align-items: center; gap: 6px; padding: 5px 6px; }
+  #editor .hslist li.form-li { display: block; padding: 0; cursor: default; border: 0; background: none; }
+  #editor .hslist li.form-li .form { margin: 2px 0 8px; border-left: 2px solid var(--accent); }
+  #editor .hslist li.dragging { background: rgba(255,255,255,.1); border-color: var(--accent); }
   #editor .hslist li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #editor .hslist li button { flex: 0 0 auto; padding: 3px 5px; display: grid; place-items: center; color: var(--muted); }
-  #editor .hslist li button:hover { color: var(--danger); border-color: var(--danger); }
-  #editor .hslist li button svg { width: 14px; height: 14px; }
+  #editor .hslist li > button { flex: 0 0 auto; padding: 3px 5px; display: grid; place-items: center; color: var(--muted); }
+  #editor .hslist li > button:hover { color: var(--danger); border-color: var(--danger); }
+  #editor .hslist li > button svg { width: 14px; height: 14px; }
   #editor .iconbtn { flex: 0 0 auto; width: 28px; height: 28px; padding: 0; display: grid; place-items: center;
     border-radius: 7px; border: 1px solid var(--border); background: rgba(255,255,255,.06); color: var(--muted); cursor: pointer; }
   #editor .iconbtn:hover { color: var(--text); border-color: rgba(255,255,255,.35); }
@@ -261,7 +266,7 @@
   #editor .scenes li span:not(.grip) { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #editor .scenes li.current { border-color: rgba(232,176,74,.5); }
   #editor .scenes li.dragging { background: rgba(255,255,255,.1); border-color: var(--accent); }
-  #editor .grip { flex: 0 0 auto; display: grid; place-items: center; width: 18px; height: 28px; color: var(--muted);
+  #editor .hslist .grip, #editor .grip { flex: 0 0 auto; display: grid; place-items: center; width: 18px; height: 28px; color: var(--muted);
     cursor: grab; touch-action: none; }
   #editor .grip:active { cursor: grabbing; }
   #editor .grip svg { width: 14px; height: 14px; }
@@ -294,9 +299,9 @@
   @media (max-width: 600px) {
     #title { top: 52px; left: 14px; max-width: calc(100vw - 80px); font-size: 15px; }
     #compass { width: 220px; }
-    #menu { left: 10px; right: 10px; bottom: 10px; transform: none; max-width: none; padding: 5px 6px; }
-    #menu .menu-logo { max-height: 26px; max-width: 90px; margin: 0 6px 0 2px; }
-    #menu button { padding: 8px 14px; font-size: 13px; }
+    #menu { left: 10px; right: 10px; bottom: 10px; transform: none; max-width: none; height: 52px; padding: 6px 8px; border-radius: 14px; }
+    #menu .menu-logo { max-height: 32px; max-width: 100px; margin: 0 6px 0 2px; }
+    #menu button { padding: 9px 16px; font-size: 14px; }
     #tools { right: 8px; }
     #tools button, #tools a { width: 34px; height: 34px; }
     #btnUi { right: 10px; bottom: 70px; width: 40px; height: 40px; }
@@ -676,7 +681,7 @@ function hotspotLabel(h) {
 
 function buildHotspots() {
   hsLayer.replaceChildren();
-  hsEls = (displayed?.hotspots ?? []).map(h => {
+  hsEls = (displayed?.hotspots ?? []).map((h, i, arr) => {
     const el = document.createElement('div');
     const type = h.type in ICONS ? h.type : 'info', pin = type !== 'scene';
     el.className = 'hs ' + type + (pin ? ' pin' : '');
@@ -707,7 +712,8 @@ function buildHotspots() {
     hsLayer.appendChild(el);
     if (EDIT) attachHotspotDrag(el, h);
     else el.addEventListener('click', () => activateHotspot(h));
-    return { el, h, pin };
+    el.style.zIndex = arr.length - i; // dòng trên trong danh sách = lớp trên
+    return { el, h, pin, w: 0, ht: 0 };
   });
 }
 
@@ -778,15 +784,23 @@ info.querySelector('button').onclick = closeInfo;
 const tmpV = new THREE.Vector3(), camDir = new THREE.Vector3();
 function updateHotspots() {
   camera.getWorldDirection(camDir);
-  for (const { el, h, pin } of hsEls) {
+  for (const it of hsEls) {
+    const { el, h, pin } = it;
     dirFrom(h.lon, h.lat, tmpV);
     const facing = tmpV.dot(camDir) > 0.05;
     tmpV.project(camera);
     if (!facing || Math.abs(tmpV.x) > 1.3 || Math.abs(tmpV.y) > 1.3) { el.style.display = 'none'; continue; }
     el.style.display = '';
     const x = (tmpV.x + 1) / 2 * innerWidth, y = (1 - tmpV.y) / 2 * innerHeight;
-    // mũi tên chuyển cảnh: neo ở tâm vòng tròn; ô nhãn: neo ở đầu mũi tên nhỏ bên dưới
-    el.style.transform = `translate(${x}px, ${y}px) ` + (pin ? 'translate(-50%, calc(-100% + 6px))' : 'translate(-50%, -20px)');
+    if (pin) {
+      // ô nhãn: neo ở tâm chấm tròn dưới chân cột; làm tròn theo pixel và giữ bề rộng chẵn để cột mảnh luôn sắc nét
+      if (!it.w) {
+        el.style.width = '';
+        it.w = Math.ceil(el.offsetWidth / 2) * 2; it.ht = el.offsetHeight;
+        el.style.width = it.w + 'px';
+      }
+      el.style.transform = `translate(${Math.round(x) - it.w / 2}px, ${Math.round(y) - it.ht + 6}px)`;
+    } else el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -20px)`; // mũi tên: neo ở tâm vòng tròn
     if (h.type === 'image') {
       // popup lật xuống dưới khi gần mép trên, và dịch ngang để không tràn màn hình
       el.classList.toggle('below', y < 240);
@@ -796,6 +810,8 @@ function updateHotspots() {
   }
   hsLayer.style.opacity = fade;
 }
+
+document.fonts?.ready.then(() => hsEls.forEach(it => it.w = 0)); // đo lại bề rộng nhãn khi font tải xong
 
 // ---- Giao diện ----
 // Cảnh ban đêm (là "night" của một cảnh khác) không có mục riêng trên menu, mở bằng công tắc ngày / đêm
@@ -1094,10 +1110,10 @@ function onPanoClick(x, y) {
     // điểm mới cùng loại với điểm vừa sửa gần nhất
     const h = { type: lastType, lon: pos.lon, lat: pos.lat };
     if (lastType === 'scene') h.target = SCENES.find(s => s !== displayed)?.id ?? '';
-    displayed.hotspots.push(h);
+    displayed.hotspots.unshift(h); // điểm mới nằm lớp trên cùng
     placing = false;
     saveDraft();
-    select(h);
+    select(h, true);
   } else if (selected) select(null);
 }
 
@@ -1127,10 +1143,13 @@ function undoDelete() {
   toast('Đã khôi phục điểm');
 }
 
-function select(h) {
+function select(h, reveal = false) {
   selected = h;
+  if (h) panel = 'scene';
   buildHotspots();
   renderEditor();
+  // bấm điểm trên ảnh: cuộn khung chỉnh sửa tới đúng điểm đó
+  if (h && reveal) editor.querySelector('.hslist li.selected')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
 function attachHotspotDrag(el, h) {
@@ -1152,8 +1171,8 @@ function attachHotspotDrag(el, h) {
   el.addEventListener('pointerup', () => {
     if (!start) return;
     const moved = start.moved; start = null;
-    if (moved) { saveDraft(); if (selected === h) renderEditor(); else select(h); }
-    else select(h);
+    if (moved) { saveDraft(); if (selected === h) renderEditor(); else select(h, true); }
+    else select(h, true);
   });
 }
 
@@ -1161,6 +1180,8 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 
 function openScenePanel(o) {
   panel = 'scene';
+  editor.dataset.panel = ''; // mở lại từ đầu khung
+  selected = null;
   if (current === o) renderEditor(); else show(o);
 }
 function openOverview() {
@@ -1229,8 +1250,6 @@ function overviewHTML() {
 
 function sceneHTML() {
   const s = displayed, h = selected;
-  const sceneOpts = (val) => SCENES.filter(o => o !== s)
-    .map(o => `<option value="${esc(o.id)}"${o.id === val ? ' selected' : ''}>${esc(o.name)}</option>`).join('');
   return `
     <button class="back" data-act="overview">← Tổng quan</button>
     <h4>Cảnh 360°</h4>
@@ -1256,12 +1275,20 @@ function sceneHTML() {
     </div>
 
     <h4>Điểm bấm (${s.hotspots.length})</h4>
+    ${s.hotspots.length ? '<p class="muted">Dòng trên nằm lớp trên. Kéo ⠿ để đổi thứ tự · Delete để xoá · Ctrl+Z để hoàn tác.</p>' : ''}
     <ul class="hslist">${s.hotspots.map((x, i) => `<li data-i="${i}" class="${x === h ? 'selected' : ''}">
-      <span>${TYPE_MARK[x.type] ?? 'ⓘ'} ${esc(hotspotLabel(x))}</span>
+      <span class="grip" title="Kéo để đổi thứ tự lớp">${GRIP}</span>
+      <span class="name">${TYPE_MARK[x.type] ?? 'ⓘ'} ${esc(hotspotLabel(x))}</span>
       <button data-act="delHs" data-i="${i}" title="Xoá điểm (Delete)">${TRASH}</button>
-    </li>`).join('')}</ul>
-    ${s.hotspots.length ? '<p class="muted">Chọn điểm rồi bấm Delete để xoá · Ctrl+Z để hoàn tác.</p>' : ''}
-    ${h ? `
+    </li>${x === h ? `<li class="form-li">${hotspotForm(h)}</li>` : ''}`).join('')}</ul>
+    <button data-act="place" class="${placing ? 'on' : ''}" style="width:100%">${placing ? 'Bấm lên ảnh để đặt… (Esc huỷ)' : '+ Thêm điểm bấm'}</button>`;
+}
+
+function hotspotForm(h) {
+  const s = displayed;
+  const sceneOpts = (val) => SCENES.filter(o => o !== s)
+    .map(o => `<option value="${esc(o.id)}"${o.id === val ? ' selected' : ''}>${esc(o.name)}</option>`).join('');
+  return `
       <div class="form">
         <label>Loại</label>
         <select data-f="type">
@@ -1289,15 +1316,14 @@ function sceneHTML() {
           ${data.logo ? '' : '<p class="muted">Chưa có logo: tải logo ở màn hình Tổng quan.</p>'}` : ''}
         ${h.type === 'scene' ? '' : `
           <label>Chiều cao cột: <b class="pole-val">${h.pole ?? POLE_DEFAULT}px</b></label>
-          <input type="range" min="0" max="400" step="5" data-f="pole" value="${h.pole ?? POLE_DEFAULT}">`}
+          <input type="range" min="0" max="800" step="5" data-f="pole" value="${h.pole ?? POLE_DEFAULT}">`}
         ${h.type === 'logo' ? '' : `<label>Nhãn hiển thị (để trống = tự động)</label><input data-f="label" value="${esc(h.label)}">`}
         <p class="muted">Vị trí: lon ${h.lon}° · lat ${h.lat}°. Kéo điểm trên ảnh để di chuyển.</p>
         <div class="row">
           <button data-act="lookAt">Nhìn tới</button>
           <button class="danger" data-act="delete">Xoá điểm</button>
         </div>
-      </div>` : ''}
-    <button data-act="place" class="${placing ? 'on' : ''}" style="width:100%">${placing ? 'Bấm lên ảnh để đặt… (Esc huỷ)' : '+ Thêm điểm bấm'}</button>`;
+      </div>`;
 }
 
 function renderEditor() {
@@ -1323,7 +1349,7 @@ if (EDIT) {
     const actEl = e.target.closest('[data-act]');
     const act = actEl?.dataset.act;
     const li = e.target.closest('li[data-i]');
-    if (li && !act) return select(displayed.hotspots[+li.dataset.i]);
+    if (li && !act && !e.target.closest('.grip')) return select(displayed.hotspots[+li.dataset.i]);
     const sli = e.target.closest('li[data-scene]');
     if (sli && !act && !e.target.closest('.grip')) return openScenePanel(SCENES[+sli.dataset.scene]);
     const s = displayed;
@@ -1402,7 +1428,7 @@ if (EDIT) {
       saveDraft(); buildHotspots();
       renderEditor();
     } else {
-      const span = editor.querySelector('.hslist li.selected span');
+      const span = editor.querySelector('.hslist li.selected .name');
       if (span) span.textContent = (TYPE_MARK[selected.type] ?? 'ⓘ') + ' ' + hotspotLabel(selected);
     }
   });
@@ -1497,7 +1523,7 @@ if (EDIT) {
 
   let dragLi = null;
   editor.addEventListener('pointerdown', e => {
-    const grip = e.target.closest('.scenes .grip');
+    const grip = e.target.closest('.scenes .grip, .hslist .grip');
     if (!grip) return;
     e.preventDefault();
     dragLi = grip.closest('li');
@@ -1506,18 +1532,27 @@ if (EDIT) {
   });
   editor.addEventListener('pointermove', e => {
     if (!dragLi) return;
-    const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('.scenes li');
+    // kéo gần mép trên / dưới thì tự cuộn khung
+    const body = editor.querySelector('.body'), br = body.getBoundingClientRect();
+    if (e.clientY < br.top + 36) body.scrollTop -= 14;
+    else if (e.clientY > br.bottom - 36) body.scrollTop += 14;
+    const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('.scenes li, .hslist li[data-i]');
+    if (over?.parentNode !== dragLi.parentNode) return;
     if (!over || over === dragLi) return;
     const r = over.getBoundingClientRect();
     over.parentNode.insertBefore(dragLi, e.clientY < r.top + r.height / 2 ? over : over.nextSibling);
   });
   const endDrag = () => {
     if (!dragLi) return;
-    const order = [...dragLi.parentNode.children].map(li => SCENES[+li.dataset.scene]);
+    const list = dragLi.parentNode, isScenes = list.classList.contains('scenes');
     dragLi = null;
-    if (order.some((o, i) => o !== SCENES[i])) {
-      SCENES.splice(0, SCENES.length, ...order);
-      saveDraft(); buildSceneBar();
+    const arr = isScenes ? SCENES : displayed.hotspots;
+    const order = [...list.querySelectorAll(isScenes ? 'li[data-scene]' : 'li[data-i]')]
+      .map(li => arr[+(isScenes ? li.dataset.scene : li.dataset.i)]);
+    if (order.some((o, i) => o !== arr[i])) {
+      arr.splice(0, arr.length, ...order);
+      saveDraft();
+      if (isScenes) buildSceneBar(); else buildHotspots();
     }
     renderEditor();
   };
