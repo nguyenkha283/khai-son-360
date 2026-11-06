@@ -42,17 +42,23 @@
   body.editing #title { display: none; }
 
   /* La bàn dạng thước ngang */
-  #compass { position: fixed; top: 0; left: 50%; width: 280px; height: 46px; transform: translateX(-50%); overflow: hidden;
+  #compass { position: fixed; top: 0; left: 50%; width: 380px; height: 58px; transform: translateX(-50%); overflow: hidden;
     pointer-events: none; -webkit-mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
     mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent); }
   #compass .strip { position: absolute; top: 0; left: 0; height: 100%; will-change: transform; }
-  #compass .t { position: absolute; top: 0; width: 1px; height: 7px; background: rgba(255,255,255,.55); }
-  #compass .t.m { height: 13px; background: rgba(255,255,255,.85); }
-  #compass .t b { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 500;
-    color: rgba(255,255,255,.75); white-space: nowrap; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
-  #compass .t.main b { font-size: 14px; font-weight: 600; color: #fff; top: 16px; }
+  #compass .t { position: absolute; top: 0; width: 1.5px; height: 9px; background: rgba(255,255,255,.6); }
+  #compass .t.m { width: 2px; height: 17px; background: rgba(255,255,255,.9); }
+  #compass .t b { position: absolute; top: 21px; left: 50%; transform: translateX(-50%); font-size: 12px; font-weight: 500;
+    color: rgba(255,255,255,.8); white-space: nowrap; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+  #compass .t.main b { font-size: 18px; font-weight: 700; color: #fff; top: 21px; }
   #compass::after { content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-    border: 7px solid transparent; border-top: 9px solid var(--g1); border-bottom-width: 0; }
+    border: 9px solid transparent; border-top: 12px solid var(--g1); border-bottom-width: 0; }
+
+  /* La bàn tròn góc trên bên phải: hoa gió đứng yên, kim xoay theo hướng nhìn */
+  #compassRound { position: fixed; top: 14px; right: 14px; width: 96px; height: 96px; pointer-events: none;
+    filter: drop-shadow(0 1px 4px rgba(0,0,0,.45)); }
+  #compassRound svg { display: block; width: 100%; height: 100%; }
+  #compassRound .needle { transform-origin: 100px 100px; transform-box: view-box; }
 
   /* Thanh menu phía dưới */
   #menu { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; align-items: center;
@@ -322,7 +328,8 @@
 
   @media (max-width: 600px) {
     #title { top: 52px; left: 14px; max-width: calc(100vw - 80px); font-size: 15px; }
-    #compass { width: 220px; }
+    #compass { width: 260px; }
+    #compassRound { top: 10px; right: 10px; width: 72px; height: 72px; }
     #menu { left: 10px; right: 10px; bottom: 10px; transform: none; max-width: none; height: 52px; padding: 6px 8px; border-radius: 999px; }
     #menu .menu-logo { max-height: 32px; max-width: 100px; margin: 0 6px 0 2px; }
     #menu button { padding: 9px 16px; font-size: 14px; }
@@ -349,6 +356,7 @@
 
 <div id="title" class="ui"></div>
 <div id="compass" class="ui"><div class="strip"></div></div>
+<div id="compassRound" class="ui hidden"><svg viewBox="0 0 200 200"><defs><linearGradient id="needleGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--g1)"/><stop offset="1" style="stop-color:var(--g2)"/></linearGradient></defs><path d="M120.8 16.6A86 86 0 0 1 183.4 79.2M183.4 120.8A86 86 0 0 1 120.8 183.4M79.2 183.4A86 86 0 0 1 16.6 120.8M16.6 79.2A86 86 0 0 1 79.2 16.6" fill="none" stroke="rgba(255,255,255,.8)" stroke-width="3" stroke-linecap="round"/><g opacity=".95"><path d="M100 100L128.3 71.7L100.0 91.0Z" fill="#fff" fill-opacity=".92"/><path d="M100 100L128.3 71.7L109.0 100.0Z" fill="#cfd4db" fill-opacity=".92"/><path d="M100 100L128.3 128.3L109.0 100.0Z" fill="#fff" fill-opacity=".92"/><path d="M100 100L128.3 128.3L100.0 109.0Z" fill="#cfd4db" fill-opacity=".92"/><path d="M100 100L71.7 128.3L100.0 109.0Z" fill="#fff" fill-opacity=".92"/><path d="M100 100L71.7 128.3L91.0 100.0Z" fill="#cfd4db" fill-opacity=".92"/><path d="M100 100L71.7 71.7L91.0 100.0Z" fill="#fff" fill-opacity=".92"/><path d="M100 100L71.7 71.7L100.0 91.0Z" fill="#cfd4db" fill-opacity=".92"/><path d="M100 100L100.0 34.0L90.8 90.8Z" fill="#fff" fill-opacity=".92"/><path d="M100 100L100.0 34.0L109.2 90.8Z" fill="#cfd4db" fill-opacity=".92"/><path d="M100 100L166.0 100.0L109.2 90.8Z" fill="#fff" fill-opacity=".92"/><path d="M100 100L166.0 100.0L109.2 109.2Z" fill="#cfd4db" fill-opacity=".92"/><path d="M100 100L100.0 166.0L109.2 109.2Z" fill="#fff" fill-opacity=".92"/><path d="M100 100L100.0 166.0L90.8 109.2Z" fill="#cfd4db" fill-opacity=".92"/><path d="M100 100L34.0 100.0L90.8 109.2Z" fill="#fff" fill-opacity=".92"/><path d="M100 100L34.0 100.0L90.8 90.8Z" fill="#cfd4db" fill-opacity=".92"/></g><g class="needle"><path d="M100 24L111 100L100 108L89 100Z" fill="url(#needleGrad)" stroke="rgba(255,255,255,.6)" stroke-width="1"/><circle cx="100" cy="100" r="5" fill="#fff"/></g></svg></div>
 
 <div id="tools" class="ui">
   <div class="tgroup glass" id="social"></div>
@@ -889,7 +897,7 @@ applyTheme();
 
 // La bàn: thước ngang trượt theo hướng nhìn; scene.north = kinh độ (lon) của hướng Bắc trong ảnh
 const compassStrip = document.querySelector('#compass .strip');
-const PX_PER_DEG = 2.4, DIRS = ['B', 'ĐB', 'Đ', 'ĐN', 'N', 'TN', 'T', 'TB'];
+const PX_PER_DEG = 3, DIRS = ['B', 'ĐB', 'Đ', 'ĐN', 'N', 'TN', 'T', 'TB'];
 for (let d = -540; d <= 540; d += 5) {
   const t = document.createElement('i');
   t.className = 't' + (d % 15 === 0 ? ' m' : '') + (d % 90 === 0 ? ' main' : '');
@@ -898,10 +906,19 @@ for (let d = -540; d <= 540; d += 5) {
   compassStrip.appendChild(t);
 }
 let lastBearing = null;
+const needle = document.querySelector('#compassRound .needle');
+function applyCompassStyle() {
+  const round = data.compass === 'round';
+  document.getElementById('compass').classList.toggle('hidden', round);
+  document.getElementById('compassRound').classList.toggle('hidden', !round);
+  lastBearing = null;
+}
+applyCompassStyle();
 function updateCompass() {
   const b = Math.round((((lon - (displayed?.north ?? 0)) % 360) + 540) % 360 * 10) / 10 - 180;
   if (b === lastBearing) return;
   lastBearing = b;
+  if (data.compass === 'round') { needle.style.transform = `rotate(${b}deg)`; return; }
   const w = document.getElementById('compass').clientWidth;
   compassStrip.style.transform = `translateX(${w / 2 - (b + 540) * PX_PER_DEG}px)`;
 }
@@ -1258,6 +1275,12 @@ function overviewHTML() {
     </div>
     <div class="grad-preview"></div>
 
+    <h4>Kiểu la bàn</h4>
+    <select data-setting="compass">
+      <option value="ruler"${data.compass !== 'round' ? ' selected' : ''}>Thước ngang (giữa phía trên)</option>
+      <option value="round"${data.compass === 'round' ? ' selected' : ''}>La bàn tròn (góc trên bên phải)</option>
+    </select>
+
     <h4>Cảnh 360° (${SCENES.length})</h4>
     <ul class="scenes">${SCENES.map((o, i) => `<li data-scene="${i}" class="${o === s ? 'current' : ''}">
       <span class="grip" title="Kéo để sắp xếp">${GRIP}</span>
@@ -1464,7 +1487,12 @@ if (EDIT) {
   });
 
   editor.addEventListener('input', e => {
-    const { sceneF, theme, social, filter } = e.target.dataset;
+    const { sceneF, theme, social, filter, setting } = e.target.dataset;
+    if (setting === 'compass') {
+      if (e.target.value === 'round') data.compass = 'round'; else delete data.compass;
+      applyCompassStyle(); saveDraft();
+      return;
+    }
     if (filter) { hsFilter[filter] = e.target.value; applyHsFilter(); return; }
     if (sceneF && displayed) {
       const v = e.target.value;
