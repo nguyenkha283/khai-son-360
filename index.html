@@ -185,7 +185,7 @@
     box-shadow: 0 0 4px rgba(0,0,0,.5); }
   .hs.pin .badge { padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.92); box-shadow: 0 3px 12px rgba(0,0,0,.35);
     transition: transform .15s; }
-  .hs.pin .badge img { display: block; max-width: 90px; max-height: 60px; }
+  .hs.pin .badge img { display: block; width: var(--logo-w, 90px); height: auto; }
   .hs.pin:hover .label { filter: brightness(1.12); transform: scale(1.04); }
   .hs.pin:hover .badge { transform: scale(1.05); }
   .hs.pin.selected .label, .hs.pin.selected .badge { outline: 2px solid #fff; outline-offset: 2px; }
@@ -214,7 +214,11 @@
   #lightbox .next { right: 14px; top: 50%; transform: translateY(-50%); }
 
   /* ---- Trình chỉnh sửa ---- */
-  #editor { position: fixed; top: 16px; left: 16px; width: 360px; max-height: calc(100vh - 120px); z-index: 6;
+  #btnGuest { position: fixed; top: 16px; left: 16px; z-index: 6; display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 14px; color: var(--text); font-size: 13px; font-weight: 500; text-decoration: none; background: var(--panel-solid); }
+  #btnGuest:hover { border-color: rgba(255,255,255,.35); }
+  #btnGuest svg { width: 16px; height: 16px; }
+  #editor { position: fixed; top: 64px; left: 16px; width: 360px; max-height: calc(100vh - 160px); z-index: 6;
     display: flex; flex-direction: column; overflow: hidden; background: var(--panel-solid); font-size: 13px; }
   #editor .body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; }
   #editor .foot { flex: 0 0 auto; padding: 10px 14px 12px; border-top: 1px solid var(--border); }
@@ -329,7 +333,8 @@
     #daynight i { width: 28px; height: 28px; }
     #daynight.night i { transform: translateY(-40px); }
     #info { bottom: 120px; }
-    #editor { left: 12px; right: 12px; width: auto; top: 64px; max-height: 45vh; }
+    #editor { left: 12px; right: 12px; width: auto; top: 60px; max-height: 45vh; }
+    #btnGuest { top: 12px; left: 12px; }
     #lightbox { padding: 60px 12px 16px; }
     #lightbox .prev, #lightbox .next { top: auto; bottom: 16px; transform: none; }
   }
@@ -381,6 +386,10 @@
   <button class="prev" title="Ảnh trước (←)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
   <button class="next" title="Ảnh sau (→)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
 </div>
+<a id="btnGuest" class="glass hidden" href="./" target="_blank" rel="noopener" title="Mở trang khách ở tab mới (chỉ thấy dữ liệu đã lưu)">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+  Xem trang khách
+</a>
 <div id="editor" class="glass hidden"></div>
 <div id="toast" class="glass faded"></div>
 <div id="login" class="hidden"><form class="glass">
@@ -681,7 +690,7 @@ const ICONS = {
   logo: '',
 };
 const TYPE_MARK = { scene: '➜', info: 'ⓘ', image: '▣', logo: '◆' };
-const POLE_DEFAULT = 40;
+const POLE_DEFAULT = 40, LOGO_W_DEFAULT = 90;
 const hsLayer = document.getElementById('hotspots');
 let hsEls = [];
 
@@ -695,7 +704,7 @@ function hotspotLabel(h) {
   if (h.label) return h.label;
   if (h.type === 'scene') return byId(h.target)?.name ?? '(chưa chọn cảnh)';
   if (h.type === 'image') return h.title || fileTitle(h.image) || 'Ảnh';
-  if (h.type === 'logo') return h.title || 'Logo dự án';
+  if (h.type === 'logo') return 'Logo dự án';
   return h.title || 'Thông tin';
 }
 
@@ -708,6 +717,7 @@ function buildHotspots() {
     el.innerHTML = !pin ? `<div class="dot">${ICONS[type]}</div><div class="label"></div>`
       : (type === 'logo' && data.logo ? '<div class="badge"><img alt=""></div>' : '<div class="label"></div>') + '<div class="pole"></div><div class="pt"></div>';
     if (pin) el.style.setProperty('--pole', (h.pole ?? POLE_DEFAULT) + 'px');
+    if (type === 'logo') el.style.setProperty('--logo-w', (h.size ?? LOGO_W_DEFAULT) + 'px');
     el.querySelector('.badge img')?.setAttribute('src', imgSrc(data.logo));
     const lbl = el.querySelector('.label');
     if (lbl) lbl.textContent = hotspotLabel(h);
@@ -740,7 +750,7 @@ function buildHotspots() {
 function activateHotspot(h) {
   if (h.type === 'scene') { const t = byId(h.target); if (t) show(t); }
   else if (h.type === 'image') openLightbox(h);
-  else if (h.type !== 'logo' || h.text) openInfo(h);
+  else if (h.type !== 'logo') openInfo(h);
 }
 
 // ---- Lightbox ----
@@ -1355,14 +1365,14 @@ function hotspotForm(h) {
           <label>Tiêu đề (để trống = dùng tên file ảnh)</label><input data-f="title" value="${esc(h.title)}" placeholder="${esc(fileTitle(h.image))}">
           <label>Mô tả ngắn (tuỳ chọn)</label><textarea data-f="text">${esc(h.text)}</textarea>
           <label class="filepick">${h.image ? 'Đổi ảnh' : 'Tải ảnh'} từ máy lên…<input type="file" accept="image/*" data-file></label>
+        ` : h.type === 'logo' ? `
+          ${data.logo ? '' : '<p class="muted">Chưa có logo: tải logo ở màn hình Tổng quan.</p>'}
+          <label>Chiều rộng logo: <b class="size-val">${h.size ?? LOGO_W_DEFAULT}px</b> <span class="muted">(chiều cao tự theo tỉ lệ)</span></label>
+          <input type="range" min="40" max="400" step="5" data-f="size" value="${h.size ?? LOGO_W_DEFAULT}">
         ` : `
           <label>Tiêu đề</label><input data-f="title" value="${esc(h.title)}">
           <label>Nội dung</label><textarea data-f="text">${esc(h.text)}</textarea>
         `}
-        ${h.type === 'logo' ? `
-          <label>Tên (hiện khi rê chuột)</label><input data-f="title" value="${esc(h.title)}">
-          <label>Nội dung khi bấm (tuỳ chọn)</label><textarea data-f="text">${esc(h.text)}</textarea>
-          ${data.logo ? '' : '<p class="muted">Chưa có logo: tải logo ở màn hình Tổng quan.</p>'}` : ''}
         ${h.type === 'scene' ? '' : `
           <label>Chiều cao cột: <b class="pole-val">${h.pole ?? POLE_DEFAULT}px</b></label>
           <input type="range" min="0" max="800" step="5" data-f="pole" value="${h.pole ?? POLE_DEFAULT}">`}
@@ -1390,8 +1400,10 @@ function renderEditor() {
     <div class="body">${panel === 'scene' ? sceneHTML() : overviewHTML()}</div>
     <div class="foot">
       <p class="status"></p>
-      <button class="primary" data-act="save" style="width:100%;margin-bottom:6px">Lưu lên server (Ctrl+S)</button>
-      <button data-act="discard" style="width:100%">Bỏ thay đổi</button>
+      <div class="row" style="margin-bottom:0">
+        <button class="primary" data-act="save" style="flex:2">Lưu lên server (Ctrl+S)</button>
+        <button data-act="discard">Bỏ thay đổi</button>
+      </div>
     </div>`;
   if (samePanel) editor.querySelector('.body').scrollTop = scroll;
   applyHsFilter();
@@ -1402,6 +1414,7 @@ function renderEditor() {
 if (EDIT) {
   document.body.classList.add('editing');
   editor.classList.remove('hidden');
+  document.getElementById('btnGuest').classList.remove('hidden');
 
   editor.addEventListener('click', e => {
     const actEl = e.target.closest('[data-act]');
@@ -1477,15 +1490,15 @@ if (EDIT) {
     const f = e.target.dataset.f;
     if (!f || !selected) return;
     let v = e.target.value;
-    if (f === 'pole') {
+    if (f === 'pole' || f === 'size') {
       v = +v;
-      editor.querySelector('.pole-val').textContent = v + 'px';
+      editor.querySelector(f === 'pole' ? '.pole-val' : '.size-val').textContent = v + 'px';
     }
     if (v !== '') selected[f] = v; else delete selected[f];
     saveDraft();
     buildHotspots();
     if (f === 'type') {
-      const keep = { scene: ['target'], info: ['title', 'text'], logo: ['title', 'text'], image: ['title', 'text', 'image', 'thumb'] }[v] ?? [];
+      const keep = { scene: ['target'], info: ['title', 'text'], logo: [], image: ['title', 'text', 'image', 'thumb'] }[v] ?? [];
       for (const k of ['target', 'title', 'text', 'image', 'thumb']) if (!keep.includes(k)) delete selected[k];
       if (v === 'scene') selected.target ??= SCENES.find(o => o !== displayed)?.id;
       lastType = v;
